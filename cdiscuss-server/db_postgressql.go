@@ -120,7 +120,7 @@ func (postgresAdapter PostgresAdapter) CreaeUser(username string, password strin
 func (postgresAdapter PostgresAdapter) ModifyUserPassword(id uint64, oldPassword string, newPassword string) error {
 	tx, err := postgresAdapter.db.Begin()
 	if err != nil {
-		return fmt.Errorf("Error modifing  user password (create transaction): %w", err)
+		return fmt.Errorf("Error modifing user password (create transaction): %w", err)
 	}
 
 	getQury := "SELECT salt, pw_hash FROM users WHERE id = ? LIMIT 1"
@@ -183,11 +183,38 @@ func (postgresAdapter PostgresAdapter) ModifyUserPassword(id uint64, oldPassword
 }
 
 func (postgresAdapter PostgresAdapter) ModifyUserAdminRole(id uint64, adminRole bool) (*User, error) {
-	return nil, fmt.Errorf("Not implemented")
+	const query = "UPDATE SET admin_role = ? WHERE id = ?"
+	_, err := postgresAdapter.db.Exec(query, adminRole, id)
+	if err != nil {
+		return fmt.Errorf("Failed to updae adminRole=%v  id=%d: %w", adminRole, id, err)
+	}
+	return nil
 }
 
 func (postgresAdapter PostgresAdapter) AuthenticateUser(username string, password string) (*User, error) {
-	return nil, fmt.Errorf("Not implemented")
+	const query = "SELECT id, username, salt, pw_hash, admin_role FROM users WHERE username = ? LIMIT 1"
+	var row *sql.Row = postgresAdapter.db.QueryRow(query, username)
+
+	user := &User{}
+	var salt string
+	var pwHash string
+	err := row.Scan(&user.Id, &user.Username, &salt, &pwHash, &user.AdminRole)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, errUserDoesntExist
+		}
+		return nil, fmt.Errorf("Failed to authenicate a user (query a user) username='%s': %w", username, err)
+	}
+
+	pwHashRegenerated, err := getPasswordAndSaltSHA256Hash(salt, password)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to authenicate a user (password check) username='%s': %w", username, err)
+	}
+
+	if pwHash != pwHashRegenerated {
+		return nil, errUserWrongPassword
+	}
+	return user, nil
 }
 
 func (postgresAdapter PostgresAdapter) GetUser(id string) (*User, error) {
@@ -198,7 +225,7 @@ func (postgresAdapter PostgresAdapter) GetUser(id string) (*User, error) {
 	err := row.Scan(&user.Id, &user.Username, &user.AdminRole)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, nil
+			return nil, errUserDoesntExist
 		}
 		return nil, fmt.Errorf("Failed to query a user id=%d: %w", id, err)
 	}
@@ -213,7 +240,7 @@ func (postgresAdapter PostgresAdapter) GetUserByUsername(username string) (*User
 	err := row.Scan(&user.Id, &user.Username, &user.AdminRole)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, nil
+			return nil, errUserDoesntExist
 		}
 		return nil, fmt.Errorf("Failed to query a user username='%s': %w", username, err)
 	}
