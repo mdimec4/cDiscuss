@@ -69,7 +69,7 @@ func (postgresAdapter PostgresAdapter) CreaeUser(username string, password strin
 	}
 
 	getQury := "SELECT id FROM users WHERE username = ? LIMIT 1"
-	var row *sql.Row = postgresAdapter.db.QueryRow(query, username)
+	var row *sql.Row = tx.QueryRow(query, username)
 	var userId int64
 	err = row.Scan(&userId)
 	if err != sql.ErrNoRows {
@@ -124,7 +124,7 @@ func (postgresAdapter PostgresAdapter) ModifyUserPassword(id uint64, oldPassword
 	}
 
 	getQury := "SELECT salt, pw_hash FROM users WHERE id = ? LIMIT 1"
-	var row *sql.Row = postgresAdapter.db.QueryRow(query, id)
+	var row *sql.Row = tx.QueryRow(query, id)
 	var oldSalt string
 	var oldPwHash string
 	err = row.Scan(&oldSalt, oldPwHash)
