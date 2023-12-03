@@ -11,13 +11,6 @@ const (
 	saltLen              = 21
 )
 
-type CommentJoinedWithUser struct {
-	Id          int64  `json: id`
-	Username    string `json: username`
-	DtCreated   int64  `json dtCreated`
-	CommentBody string `json: commentBody`
-}
-
 type Comment struct {
 	Id          int64  `json: id`
 	UrlHash     string `json: urlHash`
@@ -34,6 +27,13 @@ type PageComments struct {
 	Comments       []CommentJoinedWithUser `json: comments`
 }
 
+type CommentJoinedWithUser struct {
+	Id          int64  `json: id`
+	Username    string `json: username`
+	DtCreated   int64  `json dtCreated`
+	CommentBody string `json: commentBody`
+}
+
 type User struct {
 	Id        int64
 	Username  string
@@ -41,7 +41,7 @@ type User struct {
 }
 
 type DatabseServiceItf interface {
-	ListPageComments(pageHash string, offset uint64, count uint64) (*PageComments, error)
+	ListPageComments(urlHash string, offset uint64, count uint64) (*PageComments, error)
 	GetComment(id int64) (*Comment, error)
 	DeleteComment(id int64) error
 

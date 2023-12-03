@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	_ "github.com/lib/pq"
@@ -34,8 +35,42 @@ func (postgresAdapter PostgresAdapter) Close() error {
 }
 
 // implement DatabseServiceItf interface
-func (postgresAdapter PostgresAdapter) ListPageComments(pageHash string, offset uint64, count uint64) (*PageComments, error) {
+func (postgresAdapter PostgresAdapter) ListPageComments(urlHash string, offset uint64, count uint64) (*PageComments, error) {
+	tx, err := postgresAdapter.db.BeginTx(context.Background(), &TxOptions{Isolation: sql.LevelReadCommitted, ReadOnly: true})
+	if err != nil {
+		return nil, fmt.Errorf("Failed to read comments (create transaction): %w", err)
+	}
+
+	totalCount, err := getCommentsTotalCount(tx, urlHash)
+	if err != nil {
+		err2 := tx.Rollback()
+		if err2 != nil {
+			log.Errorf("Failed to rollback getting: %w", err2)
+		}
+	}
+
 	return nil, fmt.Errorf("Not implemented")
+}
+
+func getCommentsTotalCount(tx *sql.Tx, urlHash string) (uint64, error) {
+	query := "SELECT COUNT(*) FROM comments WHERE page_hash = ?"
+	var row *sql.Row = tx.QueryRow(query, urlHash)
+
+	var totalCount uint64
+	err := row.Scan(&totalCount)
+	if err != nil {
+		return 0, err
+	}
+	return totalCount, err
+}
+
+func getComments(tx *sql.Tx, urlHash string, offset uint64, count uint64) ([]CommentJoinedWithUser, error) {
+	const query = ```
+	SELECT id, username, dt_created, comment_body FROM comments
+	INNER JOIN users ON id_user = id
+	WHERE url_hash = ?
+	ORDER BY id DESC OFFSET ? LIMIT ?
+	```
 }
 
 func (postgresAdapter PostgresAdapter) GetComment(id int64) (*Comment, error) {
@@ -63,7 +98,7 @@ func (postgresAdapter PostgresAdapter) DeleteComment(id int64) error {
 }
 
 func (postgresAdapter PostgresAdapter) CreaeUser(username string, password string, adminRole bool) (*User, error) {
-	tx, err := postgresAdapter.db.Begin()
+	tx, err := postgresAdapter.db.BeginTx(context.Background(), &TxOptions{Isolation: sql.LevelReadCommitted, ReadOnly: false})
 	if err != nil {
 		return nil, fmt.Errorf("Error creating user (create transaction): %w", err)
 	}
@@ -118,7 +153,7 @@ func (postgresAdapter PostgresAdapter) CreaeUser(username string, password strin
 }
 
 func (postgresAdapter PostgresAdapter) ModifyUserPassword(id uint64, oldPassword string, newPassword string) error {
-	tx, err := postgresAdapter.db.Begin()
+	tx, err := postgresAdapter.db.BeginTx(context.Background(), &TxOptions{Isolation: sql.LevelReadCommitted, ReadOnly: false})
 	if err != nil {
 		return fmt.Errorf("Error modifing user password (create transaction): %w", err)
 	}
