@@ -1,6 +1,7 @@
 package main
 
 import "fmt"
+import "time"
 import "errors"
 import "crypto/sha256"
 
@@ -16,11 +17,11 @@ const (
 )
 
 type Comment struct {
-	Id          int64  `json: id`
-	UrlHash     string `json: urlHash`
-	IdUser      int64  `json: idUser`
-	DtCreated   int64  `json dtCreated`
-	CommentBody string `json: commentBody`
+	Id          int64     `json: id`
+	UrlHash     string    `json: urlHash`
+	IdUser      int64     `json: idUser`
+	DtCreated   time.Time `json dtCreated`
+	CommentBody string    `json: commentBody`
 }
 
 type PageComments struct {
@@ -32,10 +33,10 @@ type PageComments struct {
 }
 
 type CommentJoinedWithUser struct {
-	Id          int64  `json: id`
-	Username    string `json: username`
-	DtCreated   int64  `json dtCreated`
-	CommentBody string `json: commentBody`
+	Id          int64     `json: id`
+	Username    string    `json: username`
+	DtCreated   time.Time `json dtCreated`
+	CommentBody string    `json: commentBody`
 }
 
 type User struct {
@@ -47,14 +48,14 @@ type User struct {
 type DatabseServiceItf interface {
 	ListPageComments(urlHash string, offset uint64, count uint64) (*PageComments, error)
 	GetComment(id int64) (*Comment, error)
-	CreateComment(urlHash string, idUser int64, commentBody string) error
+	CreateComment(urlHash string, idUser int64, dtCreated time.Time, commentBody string) error
 	DeleteComment(id int64) error
 
 	CreateUser(username string, password string, adminRole bool) (*User, error)
 	ModifyUserPassword(id int64, oldPassword string, newPassword string) error
 	ModifyUserAdminRole(id int64, adminRole bool) (*User, error)
 	AuthenticateUser(username string, password string) (*User, error)
-	GetUser(id string) (*User, error)
+	GetUser(id int64) (*User, error)
 	GetUserByUsername(username string) (*User, error)
 	DeleteUser(id int64) error
 }

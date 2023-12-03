@@ -6,6 +6,7 @@ import (
 	"fmt"
 	_ "github.com/lib/pq"
 	"log/slog"
+	"time"
 )
 
 type PostgresAdapter struct {
@@ -69,7 +70,7 @@ func (postgresAdapter PostgresAdapter) ListPageComments(urlHash string, offset u
 }
 
 func getCommentsTotalCount(tx *sql.Tx, urlHash string) (uint64, error) {
-	const query = "SELECT COUNT(*) FROM comments WHERE page_hash = ?"
+	const query = "SELECT COUNT(*) FROM comments WHERE url_hash=$1"
 	var row *sql.Row = tx.QueryRow(query, urlHash)
 
 	var totalCount uint64
@@ -81,10 +82,10 @@ func getCommentsTotalCount(tx *sql.Tx, urlHash string) (uint64, error) {
 }
 
 func getComments(tx *sql.Tx, urlHash string, offset uint64, count uint64) ([]CommentJoinedWithUser, error) {
-	const query = `SELECT id, username, dt_created, comment_body FROM comments
-	INNER JOIN users ON id_user = id
-	WHERE url_hash = ?
-	ORDER BY id DESC OFFSET ? LIMIT ?`
+	const query = `SELECT cm.id, us.username, cm.dt_created, cm.comment_body FROM comments AS cm
+	INNER JOIN users AS us ON cm.id_user=us.id
+	WHERE cm.url_hash=$1 
+	ORDER BY cm.id DESC OFFSET $2 LIMIT $3`
 
 	rows, err := tx.Query(query, urlHash, offset, count)
 	if err != nil {
@@ -113,7 +114,7 @@ func getComments(tx *sql.Tx, urlHash string, offset uint64, count uint64) ([]Com
 }
 
 func (postgresAdapter PostgresAdapter) GetComment(id int64) (*Comment, error) {
-	const query = "SELECT id, url_hash, id_user, dt_created, comment_body FROM comments WHERE id = ? LIMIT 1"
+	const query = "SELECT id, url_hash, id_user, dt_created, comment_body FROM comments WHERE id=$1 LIMIT 1"
 	var row *sql.Row = postgresAdapter.db.QueryRow(query, id)
 
 	comment := &Comment{}
@@ -127,7 +128,7 @@ func (postgresAdapter PostgresAdapter) GetComment(id int64) (*Comment, error) {
 	return comment, nil
 }
 
-func (postgresAdapter PostgresAdapter) CreateComment(urlHash string, idUser int64, commentBody string) error {
+func (postgresAdapter PostgresAdapter) CreateComment(urlHash string, idUser int64, dtCreated time.Time, commentBody string) error {
 	if urlHash == "" {
 		return fmt.Errorf("Failed to crate a comment idUser=%d: empty url hash", idUser)
 	}
@@ -135,8 +136,8 @@ func (postgresAdapter PostgresAdapter) CreateComment(urlHash string, idUser int6
 		return fmt.Errorf("Failed to crate a comment urlHash=%s, idUser=%d: empty comment body", urlHash, idUser)
 	}
 
-	const query = "INSERT INTO comments (url_hash, id_user, comment_body) VALUES(?, ?, ?)"
-	_, err := postgresAdapter.db.Exec(query, urlHash, idUser, commentBody)
+	const query = "INSERT INTO comments (url_hash, id_user, dt_created, comment_body) VALUES($1, $2, $3, $4)"
+	_, err := postgresAdapter.db.Exec(query, urlHash, idUser, dtCreated, commentBody)
 	if err != nil {
 		return fmt.Errorf("Failed to crate a comment urlHash=%s, idUser=%d: %w", urlHash, idUser, err)
 	}
@@ -144,7 +145,7 @@ func (postgresAdapter PostgresAdapter) CreateComment(urlHash string, idUser int6
 }
 
 func (postgresAdapter PostgresAdapter) DeleteComment(id int64) error {
-	const query = "DELETE FROM comments WHERE id = ?"
+	const query = "DELETE FROM comments WHERE id=$1"
 	_, err := postgresAdapter.db.Exec(query, id)
 	if err != nil {
 		return fmt.Errorf("Failed to delete a comment id=%d: %w", id, err)
@@ -165,10 +166,7 @@ func (postgresAdapter PostgresAdapter) CreateUser(username string, password stri
 		return nil, fmt.Errorf("Error creating user (create transaction): %w", err)
 	}
 
-	const getQuery = "SELECT id FROM users WHERE username = ? LIMIT 1"
-	var row *sql.Row = tx.QueryRow(getQuery, username)
-	var userId int64
-	err = row.Scan(&userId)
+	userId, err := getUserId(tx, username)
 	if err != sql.ErrNoRows {
 		err2 := tx.Rollback()
 		if err2 != nil {
@@ -190,8 +188,8 @@ func (postgresAdapter PostgresAdapter) CreateUser(username string, password stri
 		return nil, fmt.Errorf("Error creating user (password and salt hash): %w", err)
 	}
 
-	const queryInsert = "INSERT INTO users (username, salt, pw_hash, admin_role) VALUES(?, ?, ?, FALSE) where id = ?"
-	result, err := tx.Exec(queryInsert, username, salt, pwHash, userId)
+	const queryInsert = "INSERT INTO users (username, salt, pw_hash, admin_role) VALUES($1, $2, $3, FALSE)"
+	_, err = tx.Exec(queryInsert, username, salt, pwHash)
 	if err != nil {
 		err2 := tx.Rollback()
 		if err2 != nil {
@@ -199,7 +197,8 @@ func (postgresAdapter PostgresAdapter) CreateUser(username string, password stri
 		}
 		return nil, fmt.Errorf("Error creating user (insert): %w", err)
 	}
-	userId, err = result.LastInsertId()
+
+	userId, err = getUserId(tx, username)
 	if err != nil {
 		err2 := tx.Rollback()
 		if err2 != nil {
@@ -212,6 +211,17 @@ func (postgresAdapter PostgresAdapter) CreateUser(username string, password stri
 		return nil, fmt.Errorf("Failed to commit user creation: %w", err)
 	}
 	return &User{Id: userId, Username: username, AdminRole: false}, nil
+}
+
+func getUserId(tx *sql.Tx, username string) (int64, error) {
+	const getQuery = "SELECT id FROM users WHERE username=$1 LIMIT 1"
+	var row *sql.Row = tx.QueryRow(getQuery, username)
+	var userId int64
+	err := row.Scan(&userId)
+	if err != nil {
+		return 0, err
+	}
+	return userId, nil
 }
 
 func (postgresAdapter PostgresAdapter) ModifyUserPassword(id int64, oldPassword string, newPassword string) error {
@@ -227,7 +237,7 @@ func (postgresAdapter PostgresAdapter) ModifyUserPassword(id int64, oldPassword 
 		return fmt.Errorf("Error modifing user password (create transaction): %w", err)
 	}
 
-	const getQuery = "SELECT salt, pw_hash FROM users WHERE id = ? LIMIT 1"
+	const getQuery = "SELECT salt, pw_hash FROM users WHERE id=$1 LIMIT 1"
 	var row *sql.Row = tx.QueryRow(getQuery, id)
 	var oldSalt string
 	var oldPwHash string
@@ -269,7 +279,7 @@ func (postgresAdapter PostgresAdapter) ModifyUserPassword(id int64, oldPassword 
 		return fmt.Errorf("Error changing password (password and salt hash): %w", err)
 	}
 
-	const queryInsert = "UPDATE users SET (salt = ?, pw_hash = ? WHERE id = ?"
+	const queryInsert = "UPDATE users SET salt=$1, pw_hash=$2 WHERE id=$3"
 	_, err = tx.Exec(queryInsert, newSalt, newPwHash, id)
 	if err != nil {
 		err2 := tx.Rollback()
@@ -287,7 +297,7 @@ func (postgresAdapter PostgresAdapter) ModifyUserPassword(id int64, oldPassword 
 }
 
 func (postgresAdapter PostgresAdapter) ModifyUserAdminRole(id int64, adminRole bool) (*User, error) {
-	const query = "UPDATE SET admin_role = ? WHERE id = ?"
+	const query = "UPDATE SET admin_role=$1 WHERE id=$2"
 	_, err := postgresAdapter.db.Exec(query, adminRole, id)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to updae adminRole=%v  id=%d: %w", adminRole, id, err)
@@ -296,7 +306,7 @@ func (postgresAdapter PostgresAdapter) ModifyUserAdminRole(id int64, adminRole b
 }
 
 func (postgresAdapter PostgresAdapter) AuthenticateUser(username string, password string) (*User, error) {
-	const query = "SELECT id, username, salt, pw_hash, admin_role FROM users WHERE username = ? LIMIT 1"
+	const query = "SELECT id, username, salt, pw_hash, admin_role FROM users WHERE username=$1 LIMIT 1"
 	var row *sql.Row = postgresAdapter.db.QueryRow(query, username)
 
 	user := &User{}
@@ -322,7 +332,7 @@ func (postgresAdapter PostgresAdapter) AuthenticateUser(username string, passwor
 }
 
 func (postgresAdapter PostgresAdapter) GetUser(id int64) (*User, error) {
-	const query = "SELECT id, username, admin_role FROM users WHERE id = ? LIMIT 1"
+	const query = "SELECT id, username, admin_role FROM users WHERE id=$1 LIMIT 1"
 	var row *sql.Row = postgresAdapter.db.QueryRow(query, id)
 
 	user := &User{}
@@ -337,7 +347,7 @@ func (postgresAdapter PostgresAdapter) GetUser(id int64) (*User, error) {
 }
 
 func (postgresAdapter PostgresAdapter) GetUserByUsername(username string) (*User, error) {
-	const query = "SELECT id, username, admin_role FROM users WHERE username = ? LIMIT 1"
+	const query = "SELECT id, username, admin_role FROM users WHERE username=$1 LIMIT 1"
 	var row *sql.Row = postgresAdapter.db.QueryRow(query, username)
 
 	user := &User{}
@@ -352,7 +362,7 @@ func (postgresAdapter PostgresAdapter) GetUserByUsername(username string) (*User
 }
 
 func (postgresAdapter PostgresAdapter) DeleteUser(id int64) error {
-	const query = "DELETE FROM users WHERE id = ?"
+	const query = "DELETE FROM users WHERE id=$1"
 	_, err := postgresAdapter.db.Exec(query, id)
 	if err != nil {
 		return fmt.Errorf("Failed to delete a user id=%d: %w", id, err)
