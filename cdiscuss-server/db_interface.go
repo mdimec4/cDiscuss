@@ -50,8 +50,8 @@ type DatabseServiceItf interface {
 	DeleteComment(id int64) error
 
 	CreaeUser(username string, password string, adminRole bool) (*User, error)
-	ModifyUserPassword(id uint64, oldPassword string, newPassword string) error
-	ModifyUserAdminRole(id uint64, adminRole bool) (*User, error)
+	ModifyUserPassword(id int64, oldPassword string, newPassword string) error
+	ModifyUserAdminRole(id int64, adminRole bool) (*User, error)
 	AuthenticateUser(username string, password string) (*User, error)
 	GetUser(id string) (*User, error)
 	GetUserByUsername(username string) (*User, error)
