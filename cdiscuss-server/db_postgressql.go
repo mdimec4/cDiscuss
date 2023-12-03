@@ -45,11 +45,26 @@ func (postgresAdapter PostgresAdapter) ListPageComments(urlHash string, offset u
 	if err != nil {
 		err2 := tx.Rollback()
 		if err2 != nil {
-			log.Errorf("Failed to rollback getting: %w", err2)
+			log.Errorf("Failed to rollback (getting comments): %w", err2)
 		}
+		return nil, fmt.Errorf("Failed to read comments (total comments count): %w", err)
 	}
 
-	return nil, fmt.Errorf("Not implemented")
+	commentsSlice, err := getComments(tx, urlHash, offset, count)
+	if err != nil {
+		err2 := tx.Rollback()
+		if err2 != nil {
+			log.Errorf("Failed to rollback (getting comments): %w", err2)
+		}
+		return nil, fmt.Errorf("Failed to read comments (getting comments): %w", err)
+	}
+	err = tx.Commit()
+	if err != nil {
+		return nil, fmt.Errorf("Failed to commit reading comments: %w", err)
+	}
+
+	pageComments := &PageComments{Offset: offset, RequestedCount: count, Count: len(commentsSlice), Total: totalCount, Comments: commentsSlice}
+	return pageComments, nil
 }
 
 func getCommentsTotalCount(tx *sql.Tx, urlHash string) (uint64, error) {
@@ -71,6 +86,25 @@ func getComments(tx *sql.Tx, urlHash string, offset uint64, count uint64) ([]Com
 	WHERE url_hash = ?
 	ORDER BY id DESC OFFSET ? LIMIT ?
 	```
+	rows, err := tx.Query(query, urlHash, offset, count)
+	err != nil {
+		return nil, err
+	}
+
+	commentsSlice := make([]CommentJoinedWithUser)
+	for rows.Next() {
+		comment := CommentJoinedWithUser{}
+		err = rows.Scan(&comment.Id, &comment.Username, &comment.DtCreated, &comment.CommentBody)
+		if err != nil {
+			return nil, err
+		}
+		commentSlice = append(commentSlice, comment)
+	}
+	err = rows.Err()
+	if err != nil {
+		return nil, err
+	}
+	return commentsSlice, nil
 }
 
 func (postgresAdapter PostgresAdapter) GetComment(id int64) (*Comment, error) {
@@ -81,7 +115,7 @@ func (postgresAdapter PostgresAdapter) GetComment(id int64) (*Comment, error) {
 	err := row.Scan(&comment.Id, &comment.UrlHash, &comment.DtCreated, &comment.CommentBody)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return nil, nil
+			return comment, errCommentDoesntExist
 		}
 		return nil, fmt.Errorf("Failed to query a comment id=%d: %w", id, err)
 	}
