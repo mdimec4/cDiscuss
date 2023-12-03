@@ -47,9 +47,10 @@ type User struct {
 type DatabseServiceItf interface {
 	ListPageComments(urlHash string, offset uint64, count uint64) (*PageComments, error)
 	GetComment(id int64) (*Comment, error)
+	CreateComment(urlHash string, idUser int64, commentBody string) error
 	DeleteComment(id int64) error
 
-	CreaeUser(username string, password string, adminRole bool) (*User, error)
+	CreateUser(username string, password string, adminRole bool) (*User, error)
 	ModifyUserPassword(id int64, oldPassword string, newPassword string) error
 	ModifyUserAdminRole(id int64, adminRole bool) (*User, error)
 	AuthenticateUser(username string, password string) (*User, error)

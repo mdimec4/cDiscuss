@@ -127,6 +127,22 @@ func (postgresAdapter PostgresAdapter) GetComment(id int64) (*Comment, error) {
 	return comment, nil
 }
 
+func (postgresAdapter PostgresAdapter) CreateComment(urlHash string, idUser int64, commentBody string) error {
+	if urlHash == "" {
+		return fmt.Errorf("Failed to crate a comment idUser=%d: empty url hash", idUser)
+	}
+	if commentBody == "" {
+		return fmt.Errorf("Failed to crate a comment urlHash=%s, idUser=%d: empty comment body", urlHash, idUser)
+	}
+
+	const query = "INSERT INTO comments (url_hash, id_user, comment_body) VALUES(?, ?, ?)"
+	_, err := postgresAdapter.db.Exec(query, urlHash, idUser, commentBody)
+	if err != nil {
+		return fmt.Errorf("Failed to crate a comment urlHash=%s, idUser=%d: %w", urlHash, idUser, err)
+	}
+	return nil
+}
+
 func (postgresAdapter PostgresAdapter) DeleteComment(id int64) error {
 	const query = "DELETE FROM comments WHERE id = ?"
 	_, err := postgresAdapter.db.Exec(query, id)
@@ -136,7 +152,14 @@ func (postgresAdapter PostgresAdapter) DeleteComment(id int64) error {
 	return nil
 }
 
-func (postgresAdapter PostgresAdapter) CreaeUser(username string, password string, adminRole bool) (*User, error) {
+func (postgresAdapter PostgresAdapter) CreateUser(username string, password string, adminRole bool) (*User, error) {
+	if username == "" {
+		return nil, fmt.Errorf("Error creating user: empty username")
+	}
+	if password == "" {
+		return nil, fmt.Errorf("Error creating user: empty password")
+	}
+
 	tx, err := postgresAdapter.db.BeginTx(context.Background(), &sql.TxOptions{Isolation: sql.LevelReadCommitted, ReadOnly: false})
 	if err != nil {
 		return nil, fmt.Errorf("Error creating user (create transaction): %w", err)
@@ -192,6 +215,13 @@ func (postgresAdapter PostgresAdapter) CreaeUser(username string, password strin
 }
 
 func (postgresAdapter PostgresAdapter) ModifyUserPassword(id int64, oldPassword string, newPassword string) error {
+	if oldPassword == "" {
+		return fmt.Errorf("Error modifing user password: empty old password")
+	}
+	if newPassword == "" {
+		return fmt.Errorf("Error modifing user password: empty new password")
+	}
+
 	tx, err := postgresAdapter.db.BeginTx(context.Background(), &sql.TxOptions{Isolation: sql.LevelReadCommitted, ReadOnly: false})
 	if err != nil {
 		return fmt.Errorf("Error modifing user password (create transaction): %w", err)
@@ -239,14 +269,14 @@ func (postgresAdapter PostgresAdapter) ModifyUserPassword(id int64, oldPassword 
 		return fmt.Errorf("Error changing password (password and salt hash): %w", err)
 	}
 
-	const queryInsert = "INSERT INTO users (salt, pw_hash) VALUES(?, ?) where id = ?"
+	const queryInsert = "UPDATE users SET (salt = ?, pw_hash = ? WHERE id = ?"
 	_, err = tx.Exec(queryInsert, newSalt, newPwHash, id)
 	if err != nil {
 		err2 := tx.Rollback()
 		if err2 != nil {
 			slog.Error("Failed to rollback user password change!", slog.Any("error", err2))
 		}
-		return fmt.Errorf("Error changing password (insert): %w", err)
+		return fmt.Errorf("Error changing password (update): %w", err)
 	}
 
 	err = tx.Commit()
