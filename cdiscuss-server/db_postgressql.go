@@ -128,20 +128,22 @@ func (postgresAdapter postgresAdapter) getComment(id int64) (*comment, error) {
 	return comment, nil
 }
 
-func (postgresAdapter postgresAdapter) createComment(urlHash string, idUser int64, dtCreated time.Time, commentBody string) error {
+func (postgresAdapter postgresAdapter) createComment(urlHash string, idUser int64, dtCreated time.Time, commentBody string) (int64, error) {
 	if urlHash == "" {
-		return fmt.Errorf("Failed to crate a comment idUser=%d: empty url hash", idUser)
+		return -1, fmt.Errorf("Failed to crate a comment idUser=%d: empty url hash", idUser)
 	}
 	if commentBody == "" {
-		return fmt.Errorf("Failed to crate a comment urlHash=%s, idUser=%d: empty comment body", urlHash, idUser)
+		return -1, fmt.Errorf("Failed to crate a comment urlHash=%s, idUser=%d: empty comment body", urlHash, idUser)
 	}
 
-	const query = "INSERT INTO comments (url_hash, id_user, dt_created, comment_body) VALUES($1, $2, $3, $4)"
-	_, err := postgresAdapter.db.Exec(query, urlHash, idUser, dtCreated, commentBody)
+	var commentId int64
+	const query = "INSERT INTO comments (url_hash, id_user, dt_created, comment_body) VALUES($1, $2, $3, $4) RETURNING id"
+	row := postgresAdapter.db.QueryRow(query, urlHash, idUser, dtCreated, commentBody)
+	err := row.Scan(&commentId)
 	if err != nil {
-		return fmt.Errorf("Failed to crate a comment urlHash=%s, idUser=%d: %w", urlHash, idUser, err)
+		return -1, fmt.Errorf("Failed to crate a comment urlHash=%s, idUser=%d: %w", urlHash, idUser, err)
 	}
-	return nil
+	return commentId, nil
 }
 
 func (postgresAdapter postgresAdapter) deleteComment(id int64) error {
@@ -188,8 +190,9 @@ func (postgresAdapter postgresAdapter) createUser(username string, password stri
 		return nil, fmt.Errorf("Error creating user (password and salt hash): %w", err)
 	}
 
-	const queryInsert = "INSERT INTO users (username, salt, pw_hash, admin_role) VALUES($1, $2, $3, FALSE)"
-	_, err = tx.Exec(queryInsert, username, salt, pwHash)
+	const queryInsert = "INSERT INTO users (username, salt, pw_hash, admin_role) VALUES($1, $2, $3, FALSE) RETURNING id"
+	row := tx.QueryRow(queryInsert, username, salt, pwHash)
+	err = row.Scan(&userId)
 	if err != nil {
 		err2 := tx.Rollback()
 		if err2 != nil {
@@ -198,14 +201,6 @@ func (postgresAdapter postgresAdapter) createUser(username string, password stri
 		return nil, fmt.Errorf("Error creating user (insert): %w", err)
 	}
 
-	userId, err = getUserId(tx, username)
-	if err != nil {
-		err2 := tx.Rollback()
-		if err2 != nil {
-			slog.Error("Failed to rollback user creation!", slog.Any("error", err2))
-		}
-		return nil, fmt.Errorf("Error creating user (insert - GetLastInsertId): %w", err)
-	}
 	err = tx.Commit()
 	if err != nil {
 		return nil, fmt.Errorf("Failed to commit user creation: %w", err)
@@ -296,13 +291,13 @@ func (postgresAdapter postgresAdapter) modifyUserPassword(id int64, oldPassword 
 	return nil
 }
 
-func (postgresAdapter postgresAdapter) modifyUserAdminRole(id int64, adminRole bool) (*user, error) {
+func (postgresAdapter postgresAdapter) modifyUserAdminRole(id int64, adminRole bool) error {
 	const query = "UPDATE SET admin_role=$1 WHERE id=$2"
 	_, err := postgresAdapter.db.Exec(query, adminRole, id)
 	if err != nil {
-		return nil, fmt.Errorf("Failed to updae adminRole=%v  id=%d: %w", adminRole, id, err)
+		return fmt.Errorf("Failed to updae adminRole=%v  id=%d: %w", adminRole, id, err)
 	}
-	return postgresAdapter.getUser(id)
+	return nil
 }
 
 func (postgresAdapter postgresAdapter) authenticateUser(username string, password string) (*user, error) {

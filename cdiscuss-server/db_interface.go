@@ -48,12 +48,12 @@ type user struct {
 type databseServiceItf interface {
 	listPageComments(urlHash string, offset uint64, count uint64) (*pageComments, error)
 	getComment(id int64) (*comment, error)
-	createComment(urlHash string, idUser int64, dtCreated time.Time, commentBody string) error
+	createComment(urlHash string, idUser int64, dtCreated time.Time, commentBody string) (int64, error)
 	deleteComment(id int64) error
 
 	createUser(username string, password string, adminRole bool) (*user, error)
 	modifyUserPassword(id int64, oldPassword string, newPassword string) error
-	modifyUserAdminRole(id int64, adminRole bool) (*user, error)
+	modifyUserAdminRole(id int64, adminRole bool) error
 	authenticateUser(username string, password string) (*user, error)
 	getUser(id int64) (*user, error)
 	getUserByUsername(username string) (*user, error)

@@ -26,11 +26,12 @@ func main() {
 
 	urlHash := fmt.Sprintf("%x", sha256.Sum256([]byte("https://www.example.com")))
 
-	err = db.createComment(urlHash, user.id, time.Now(), "besedilo")
+	commentId, err := db.createComment(urlHash, user.id, time.Now(), "besedilo")
 	if err != nil {
 		slog.Error("create comment", slog.Any("error", err))
 		return
 	}
+	fmt.Println(commentId)
 	/*
 		err = db.deleteUser(user.id)
 		if err != nil {
