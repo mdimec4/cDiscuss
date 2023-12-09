@@ -9,11 +9,11 @@ import (
 	"time"
 )
 
-type PostgresAdapter struct {
+type postgresAdapter struct {
 	db *sql.DB
 }
 
-func NewPostgresAdapter(connStr string) (*PostgresAdapter, error) {
+func newPostgresAdapter(connStr string) (*postgresAdapter, error) {
 	db, err := sql.Open("postgres", connStr)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to connect to postgres: %w", err)
@@ -22,21 +22,21 @@ func NewPostgresAdapter(connStr string) (*PostgresAdapter, error) {
 	if err != nil {
 		return nil, fmt.Errorf("Failed to ping postgres: %w", err)
 	}
-	postgresAdapter := &PostgresAdapter{db: db}
+	postgresAdapter := &postgresAdapter{db: db}
 
 	return postgresAdapter, nil
 }
 
-func (postgresAdapter PostgresAdapter) Close() error {
-	err := postgresAdapter.Close()
+func (postgresAdapter postgresAdapter) closeDb() error {
+	err := postgresAdapter.db.Close()
 	if err != nil {
 		return fmt.Errorf("Failed to close postgres: %w", err)
 	}
 	return nil
 }
 
-// implement DatabseServiceItf interface
-func (postgresAdapter PostgresAdapter) ListPageComments(urlHash string, offset uint64, count uint64) (*PageComments, error) {
+// implement databseServiceItf interface
+func (postgresAdapter postgresAdapter) listPageComments(urlHash string, offset uint64, count uint64) (*pageComments, error) {
 	tx, err := postgresAdapter.db.BeginTx(context.Background(), &sql.TxOptions{Isolation: sql.LevelReadCommitted, ReadOnly: true})
 	if err != nil {
 		return nil, fmt.Errorf("Failed to read comments (create transaction): %w", err)
@@ -65,7 +65,7 @@ func (postgresAdapter PostgresAdapter) ListPageComments(urlHash string, offset u
 	}
 
 	actualCount := len(commentsSlice)
-	pageComments := &PageComments{Offset: offset, RequestedCount: count, Count: uint64(actualCount), Total: totalCount, Comments: commentsSlice}
+	pageComments := &pageComments{Offset: offset, RequestedCount: count, Count: uint64(actualCount), Total: totalCount, Comments: commentsSlice}
 	return pageComments, nil
 }
 
@@ -81,7 +81,7 @@ func getCommentsTotalCount(tx *sql.Tx, urlHash string) (uint64, error) {
 	return totalCount, err
 }
 
-func getComments(tx *sql.Tx, urlHash string, offset uint64, count uint64) ([]CommentJoinedWithUser, error) {
+func getComments(tx *sql.Tx, urlHash string, offset uint64, count uint64) ([]commentJoinedWithUser, error) {
 	const query = `SELECT cm.id, us.username, cm.dt_created, cm.comment_body FROM comments AS cm
 	INNER JOIN users AS us ON cm.id_user=us.id
 	WHERE cm.url_hash=$1 
@@ -96,10 +96,10 @@ func getComments(tx *sql.Tx, urlHash string, offset uint64, count uint64) ([]Com
 	if initialSliceCap > 1024 {
 		initialSliceCap = 1024 // limit requested slice size to prevent out of memory DOS attack
 	}
-	commentsSlice := make([]CommentJoinedWithUser, 0, initialSliceCap)
+	commentsSlice := make([]commentJoinedWithUser, 0, initialSliceCap)
 
 	for rows.Next() {
-		comment := CommentJoinedWithUser{}
+		comment := commentJoinedWithUser{}
 		err = rows.Scan(&comment.Id, &comment.Username, &comment.DtCreated, &comment.CommentBody)
 		if err != nil {
 			return nil, err
@@ -113,11 +113,11 @@ func getComments(tx *sql.Tx, urlHash string, offset uint64, count uint64) ([]Com
 	return commentsSlice, nil
 }
 
-func (postgresAdapter PostgresAdapter) GetComment(id int64) (*Comment, error) {
+func (postgresAdapter postgresAdapter) getComment(id int64) (*comment, error) {
 	const query = "SELECT id, url_hash, id_user, dt_created, comment_body FROM comments WHERE id=$1 LIMIT 1"
 	var row *sql.Row = postgresAdapter.db.QueryRow(query, id)
 
-	comment := &Comment{}
+	comment := &comment{}
 	err := row.Scan(&comment.Id, &comment.UrlHash, &comment.DtCreated, &comment.CommentBody)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -128,7 +128,7 @@ func (postgresAdapter PostgresAdapter) GetComment(id int64) (*Comment, error) {
 	return comment, nil
 }
 
-func (postgresAdapter PostgresAdapter) CreateComment(urlHash string, idUser int64, dtCreated time.Time, commentBody string) error {
+func (postgresAdapter postgresAdapter) createComment(urlHash string, idUser int64, dtCreated time.Time, commentBody string) error {
 	if urlHash == "" {
 		return fmt.Errorf("Failed to crate a comment idUser=%d: empty url hash", idUser)
 	}
@@ -144,7 +144,7 @@ func (postgresAdapter PostgresAdapter) CreateComment(urlHash string, idUser int6
 	return nil
 }
 
-func (postgresAdapter PostgresAdapter) DeleteComment(id int64) error {
+func (postgresAdapter postgresAdapter) deleteComment(id int64) error {
 	const query = "DELETE FROM comments WHERE id=$1"
 	_, err := postgresAdapter.db.Exec(query, id)
 	if err != nil {
@@ -153,7 +153,7 @@ func (postgresAdapter PostgresAdapter) DeleteComment(id int64) error {
 	return nil
 }
 
-func (postgresAdapter PostgresAdapter) CreateUser(username string, password string, adminRole bool) (*User, error) {
+func (postgresAdapter postgresAdapter) createUser(username string, password string, adminRole bool) (*user, error) {
 	if username == "" {
 		return nil, fmt.Errorf("Error creating user: empty username")
 	}
@@ -210,7 +210,7 @@ func (postgresAdapter PostgresAdapter) CreateUser(username string, password stri
 	if err != nil {
 		return nil, fmt.Errorf("Failed to commit user creation: %w", err)
 	}
-	return &User{Id: userId, Username: username, AdminRole: false}, nil
+	return &user{id: userId, username: username, adminRole: false}, nil
 }
 
 func getUserId(tx *sql.Tx, username string) (int64, error) {
@@ -224,7 +224,7 @@ func getUserId(tx *sql.Tx, username string) (int64, error) {
 	return userId, nil
 }
 
-func (postgresAdapter PostgresAdapter) ModifyUserPassword(id int64, oldPassword string, newPassword string) error {
+func (postgresAdapter postgresAdapter) modifyUserPassword(id int64, oldPassword string, newPassword string) error {
 	if oldPassword == "" {
 		return fmt.Errorf("Error modifing user password: empty old password")
 	}
@@ -296,23 +296,23 @@ func (postgresAdapter PostgresAdapter) ModifyUserPassword(id int64, oldPassword 
 	return nil
 }
 
-func (postgresAdapter PostgresAdapter) ModifyUserAdminRole(id int64, adminRole bool) (*User, error) {
+func (postgresAdapter postgresAdapter) modifyUserAdminRole(id int64, adminRole bool) (*user, error) {
 	const query = "UPDATE SET admin_role=$1 WHERE id=$2"
 	_, err := postgresAdapter.db.Exec(query, adminRole, id)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to updae adminRole=%v  id=%d: %w", adminRole, id, err)
 	}
-	return postgresAdapter.GetUser(id)
+	return postgresAdapter.getUser(id)
 }
 
-func (postgresAdapter PostgresAdapter) AuthenticateUser(username string, password string) (*User, error) {
+func (postgresAdapter postgresAdapter) authenticateUser(username string, password string) (*user, error) {
 	const query = "SELECT id, username, salt, pw_hash, admin_role FROM users WHERE username=$1 LIMIT 1"
 	var row *sql.Row = postgresAdapter.db.QueryRow(query, username)
 
-	user := &User{}
+	user := &user{}
 	var salt string
 	var pwHash string
-	err := row.Scan(&user.Id, &user.Username, &salt, &pwHash, &user.AdminRole)
+	err := row.Scan(&user.id, &user.username, &salt, &pwHash, &user.adminRole)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, errUserDoesntExist
@@ -331,12 +331,12 @@ func (postgresAdapter PostgresAdapter) AuthenticateUser(username string, passwor
 	return user, nil
 }
 
-func (postgresAdapter PostgresAdapter) GetUser(id int64) (*User, error) {
+func (postgresAdapter postgresAdapter) getUser(id int64) (*user, error) {
 	const query = "SELECT id, username, admin_role FROM users WHERE id=$1 LIMIT 1"
 	var row *sql.Row = postgresAdapter.db.QueryRow(query, id)
 
-	user := &User{}
-	err := row.Scan(&user.Id, &user.Username, &user.AdminRole)
+	user := &user{}
+	err := row.Scan(&user.id, &user.username, &user.adminRole)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, errUserDoesntExist
@@ -346,12 +346,12 @@ func (postgresAdapter PostgresAdapter) GetUser(id int64) (*User, error) {
 	return user, nil
 }
 
-func (postgresAdapter PostgresAdapter) GetUserByUsername(username string) (*User, error) {
+func (postgresAdapter postgresAdapter) getUserByUsername(username string) (*user, error) {
 	const query = "SELECT id, username, admin_role FROM users WHERE username=$1 LIMIT 1"
 	var row *sql.Row = postgresAdapter.db.QueryRow(query, username)
 
-	user := &User{}
-	err := row.Scan(&user.Id, &user.Username, &user.AdminRole)
+	user := &user{}
+	err := row.Scan(&user.id, &user.username, &user.adminRole)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, errUserDoesntExist
@@ -361,7 +361,7 @@ func (postgresAdapter PostgresAdapter) GetUserByUsername(username string) (*User
 	return user, nil
 }
 
-func (postgresAdapter PostgresAdapter) DeleteUser(id int64) error {
+func (postgresAdapter postgresAdapter) deleteUser(id int64) error {
 	const query = "DELETE FROM users WHERE id=$1"
 	_, err := postgresAdapter.db.Exec(query, id)
 	if err != nil {

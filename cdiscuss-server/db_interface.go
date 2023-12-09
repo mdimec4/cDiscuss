@@ -16,7 +16,7 @@ const (
 	saltLen = 21
 )
 
-type Comment struct {
+type comment struct {
 	Id          int64     `json: id`
 	UrlHash     string    `json: urlHash`
 	IdUser      int64     `json: idUser`
@@ -24,40 +24,40 @@ type Comment struct {
 	CommentBody string    `json: commentBody`
 }
 
-type PageComments struct {
+type pageComments struct {
 	Offset         uint64                  `json: offset`
 	RequestedCount uint64                  `json: requestedCount`
 	Count          uint64                  `json: count`
 	Total          uint64                  `json: total`
-	Comments       []CommentJoinedWithUser `json: comments`
+	Comments       []commentJoinedWithUser `json: comments`
 }
 
-type CommentJoinedWithUser struct {
+type commentJoinedWithUser struct {
 	Id          int64     `json: id`
 	Username    string    `json: username`
 	DtCreated   time.Time `json dtCreated`
 	CommentBody string    `json: commentBody`
 }
 
-type User struct {
-	Id        int64
-	Username  string
-	AdminRole bool
+type user struct {
+	id        int64
+	username  string
+	adminRole bool
 }
 
-type DatabseServiceItf interface {
-	ListPageComments(urlHash string, offset uint64, count uint64) (*PageComments, error)
-	GetComment(id int64) (*Comment, error)
-	CreateComment(urlHash string, idUser int64, dtCreated time.Time, commentBody string) error
-	DeleteComment(id int64) error
+type databseServiceItf interface {
+	listPageComments(urlHash string, offset uint64, count uint64) (*pageComments, error)
+	getComment(id int64) (*comment, error)
+	createComment(urlHash string, idUser int64, dtCreated time.Time, commentBody string) error
+	deleteComment(id int64) error
 
-	CreateUser(username string, password string, adminRole bool) (*User, error)
-	ModifyUserPassword(id int64, oldPassword string, newPassword string) error
-	ModifyUserAdminRole(id int64, adminRole bool) (*User, error)
-	AuthenticateUser(username string, password string) (*User, error)
-	GetUser(id int64) (*User, error)
-	GetUserByUsername(username string) (*User, error)
-	DeleteUser(id int64) error
+	createUser(username string, password string, adminRole bool) (*user, error)
+	modifyUserPassword(id int64, oldPassword string, newPassword string) error
+	modifyUserAdminRole(id int64, adminRole bool) (*user, error)
+	authenticateUser(username string, password string) (*user, error)
+	getUser(id int64) (*user, error)
+	getUserByUsername(username string) (*user, error)
+	deleteUser(id int64) error
 }
 
 func generateSalt() string {
