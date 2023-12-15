@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+
+</head>
+
+<body>
+
+
+    <script>
+       /*function sha256(str) {
+           return crypto.subtle.digest("SHA-256", new TextEncoder("utf-8").encode(str)).then(buf => {
+               return Array.prototype.map.call(new Uint8Array(buf), x=>(('00'+x.toString(16)).slice(-2))).join('');
+           });
+       }*/
+       
+
+       
+       function sha256(str) {
+           return crypto.subtle.digest("SHA-256", new TextEncoder("utf-8").encode(str));
+        }
+        
+       function getSeedNum() {
+         return Math.floor(Math.random() * Number.MAX_SAFE_INTEGER/2);
+       }
+       
+      // TODO validate that username doesn't contain ':'. For example: [A-Za-z0-9]{1,50}
+      function createProofString(requiredNoInitialZeroBits, username, timestamp, num) {
+      	return requiredNoInitialZeroBits.toString() + ":" + username + ":" + timestamp.toString() + ":" + num;
+      }
+      
+      function countNumberOfInitialZeroBits(array) {
+        var count = 0;
+        for(i = 0; i < array.length; i++) {
+          for(j = 0; j < 8; j++) {
+            if(((array[i] >> (7 - j)) & 0x01) === 0) {
+              count++;
+            } else {
+              return count;
+            }
+          }
+        }
+      
+        return count;
+      } 
+      
+      async function findNewHash(requiredNoInitialZeroBits, username) {
+      	const timestamp = new Date().getTime();
+      	
+      	for(num = getSeedNum(); num < Number.MAX_SAFE_INTEGER; num++) {
+      	    var proofString = createProofString(requiredNoInitialZeroBits, username, timestamp, num);
+      	    console.log(proofString);
+      	    var proofStrringHash8Array = new Uint8Array(await sha256(proofString));
+      	     console.log(Array.prototype.map.call(proofStrringHash8Array, x=>(('00'+x.toString(16)).slice(-2))).join(''));
+      	    
+      	    var zeroCount = countNumberOfInitialZeroBits(proofStrringHash8Array);
+      	    console.log(zeroCount);
+      	   
+      	    if(zeroCount === requiredNoInitialZeroBits) {
+      	    	console.log(Array.prototype.map.call(proofStrringHash8Array, x=>(('00'+x.toString(16)).slice(-2))).join(''));
+      	    	return proofString;
+      	    }
+      	}
+      	
+      	throw new Error("Couldn't find requested hash!")
+      }
+
+      findNewHash(15, "adam").then(function(str) {console.log(str);} );
+    </script>
+</body>
+
+</html>
