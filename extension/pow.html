@@ -50,14 +50,13 @@
       	
       	for(num = getSeedNum(); num < Number.MAX_SAFE_INTEGER; num++) {
       	    var proofString = createProofString(requiredNoInitialZeroBits, username, timestamp, num);
-      	    console.log(proofString);
       	    var proofStrringHash8Array = new Uint8Array(await sha256(proofString));
-      	     console.log(Array.prototype.map.call(proofStrringHash8Array, x=>(('00'+x.toString(16)).slice(-2))).join(''));
       	    
       	    var zeroCount = countNumberOfInitialZeroBits(proofStrringHash8Array);
-      	    console.log(zeroCount);
-      	   
+
       	    if(zeroCount === requiredNoInitialZeroBits) {
+		console.log(proofString);
+		console.log(zeroCount);
       	    	console.log(Array.prototype.map.call(proofStrringHash8Array, x=>(('00'+x.toString(16)).slice(-2))).join(''));
       	    	return proofString;
       	    }
@@ -66,7 +65,7 @@
       	throw new Error("Couldn't find requested hash!")
       }
 
-      findNewHash(15, "adam").then(function(str) {console.log(str);} );
+      findNewHash(19, "adam").then(function(str) {console.log(str);} );
     </script>
 </body>
 
