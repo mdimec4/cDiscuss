@@ -20,7 +20,6 @@
             margin: 10px 0;
             background-color: #f5f5f5;
             border-radius: 5px;
-            white-space: pre-line; /* Preserve new lines */
         }
 
         /* Style for id and time elements */
@@ -32,11 +31,19 @@
         /* Style for the message element */
         .comment-message {
             margin: 10px;
+            white-space: pre-line; /* Preserve new lines */
+            inline-size: 99%;
+            overflow-wrap: break-word;
+        }
+
+        .comment-form-error {
+          color: red;
         }
     </style>
 </head>
 
 <body>
+    <div id="commentFormError" class="comment-form-error"></div>
     <form id="commentForm">
         <textarea id="commentText" rows="5" cols="100" name="newComment">  
         </textarea>
@@ -48,9 +55,10 @@
     </div>
 
     <script>
-        const gun = GUN(['http://localhost:8765/gun']);
+        const commentLenLimit = 4096;
         
         var commentsOrderdArray = [];
+        const gun = GUN(['http://localhost:8765/gun']);
         
         sha256(window.location.href).then(function (pageHash) {
         
@@ -63,6 +71,12 @@
                 if(!text) {
                     return;
                 }
+                if (text.length > commentLenLimit) {
+                  setCommentFormError("Comment is to long. Limit is " + commentLenLimit.toString() + " chars!");
+                  return;
+                }
+                clearCommentFormError();
+
                 commentTextElement.value="";
             
                 var comment = {id: generatePostId(), message: text};
@@ -101,6 +115,16 @@
            });
        }
        
+       function setCommentFormError(msg) {
+         const commentFormError = document.getElementById("commentFormError");
+         commentFormError.innerText = msg;
+       }
+
+       function clearCommentFormError() {
+         const commentFormError = document.getElementById("commentFormError");
+         commentFormError.innerText = "";
+       }
+
        function clearCommentSection() {
            // Get the commentSection div element
            const commentSection = document.getElementById("commentSection");
@@ -109,7 +133,7 @@
            }
        }
         
-    // Function to insert a comment at the top
+    // Function to insert comments at the top
         function renderComments(comments) {
             // Get the commentSection div element
             const commentSection = document.getElementById("commentSection");
