@@ -23,10 +23,7 @@
         
         gun.on('auth', function(ack) {
     	console.log("AUTH " + ack);
-        
-        
-        //gun.get(pageId).get('comments').map().once(function(messageData) {
-        //gun.get(pageId).map().once(function(messageData) {
+
         gun.get(pageId).get('comments').map().once(function(messageData) {
         	console.log(messageData);
                 gun.user(messageData).get('alias').then(function(who) {
@@ -36,29 +33,11 @@
 		});
             });
 
-   
-  	
-  	/*
-        var messageData = user.get('all').set({ what: "comment content1"});
+	var messageData = user.get('all').set({ what: "comment content1"});
 	gun.get(pageId).get("comments").set(messageData);
 	
 	var messageData2 = user.get('all').set({ what: "comment content2"});
 	gun.get(pageId).get("comments").set(messageData2);
-	
-	var messageData3 = user.get('all').set({ what: "comment content3"});
-	gun.get(pageId).get("comments").set(messageData3);*/
-	//gun.get(pageId).get("comments").set({msg: "abc"});
-	//gun.get(pageId).get("comments").set({msg: "niko"});
-	
-	 var messageData = user.get('all').set({ what: "comment content1"});
-	gun.get(pageId).get("comments").set(messageData);
-	
-	var messageData2 = user.get('all').set({ what: "comment content2"});
-	gun.get(pageId).get("comments").set(messageData2);
-	
-	
-	
-	console.log("set");
     })
         
         

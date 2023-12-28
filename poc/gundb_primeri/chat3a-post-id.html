@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <script src="https://cdn.jsdelivr.net/npm/gun/gun.js"></script>
+    <style>
+       body {
+           background-color: lightblue;
+       }
+       
+       #commentText {
+         box-sizing: border-box;
+         width: 100%;
+        }
+        
+        /* Style for the comment div */
+       .comment {
+            border: 1px solid #ccc;
+            padding: 10px;
+            margin: 10px 0;
+            background-color: #f5f5f5;
+            border-radius: 5px;
+            white-space: pre-line; /* Preserve new lines */
+        }
+
+        /* Style for id and time elements */
+        .comment-id, .comment-time {
+            font-weight: bold;
+            margin: 10px;
+        }
+
+        /* Style for the message element */
+        .comment-message {
+            margin: 10px;
+        }
+    </style>
+</head>
+
+<body>
+    <form id="commentForm">
+        <textarea id="commentText" rows="5" cols="100" name="newComment">  
+        </textarea>
+        <br/>
+        <button id="commentButton">submit</button>
+    </form>
+    <div id="commentSection">
+      <!-- Comment section UI here -->
+    </div>
+
+    <script>
+        const gun = GUN(['http://localhost:8765/gun']);
+        
+        var commentsOrderdArray = [];
+        
+        sha256(window.location.href).then(function (pageHash) {
+        
+            const commentButtonElement = document.getElementById("commentButton");
+            commentButtonElement.addEventListener("click", function(event) {
+                event.preventDefault()
+            
+                var commentTextElement = document.getElementById("commentText");
+                var text = commentTextElement.value;
+                if(!text) {
+                    return;
+                }
+                commentTextElement.value="";
+            
+                var comment = {id: generatePostId(), message: text};
+                gun.get(pageHash).set(comment);
+            });
+            
+            gun.get(pageHash).map().once(function(comment) {
+            	comment.time = GUN.state.is(comment, 'message');
+            
+		commentsOrderdArray.push(comment);
+		sortCommentsByTime(commentsOrderdArray)
+		
+		// re render
+		clearCommentSection();
+		renderComments(commentsOrderdArray);
+            });
+            
+        });
+        
+
+        
+       function sha256(str) {
+           return crypto.subtle.digest("SHA-256", new TextEncoder("utf-8").encode(str)).then(buf => {
+               return Array.prototype.map.call(new Uint8Array(buf), x=>(('00'+x.toString(16)).slice(-2))).join('');
+           });
+       }
+       
+       function generatePostId() {
+         return Math.floor(Math.random() * Number.MAX_SAFE_INTEGER);
+       }
+       
+       function sortCommentsByTime(comments) {
+           // sort by time
+	   comments.sort(function(a, b) {
+               return a.time - b.time;
+           });
+       }
+       
+       function clearCommentSection() {
+           // Get the commentSection div element
+           const commentSection = document.getElementById("commentSection");
+           while (commentSection.firstChild) {
+               commentSection.removeChild(commentSection.lastChild);
+           }
+       }
+        
+    // Function to insert a comment at the top
+        function renderComments(comments) {
+            // Get the commentSection div element
+            const commentSection = document.getElementById("commentSection");
+
+	    for (const comment of comments) {
+               // Create a new div for the comment
+               const commentDiv = document.createElement("div");
+               commentDiv.className = "comment"; // You can add a class for styling if needed
+
+               // Create elements for id, time, and message
+               const idElement = document.createElement("span");
+               idElement.textContent = "Post ID: " + comment.id.toString();
+               idElement.className = "comment-id";
+
+               const timeElement = document.createElement("span");
+               timeElement.textContent = "Time: " + new Date(comment.time); // Convert UNIX timestamp to a readable date
+               timeElement.className = "comment-time";
+
+               const messageElement = document.createElement("div");
+               messageElement.textContent = comment.message;
+               messageElement.className = "comment-message";
+
+               // Append id, time, and message elements to the comment div
+               commentDiv.appendChild(idElement);
+               commentDiv.appendChild(timeElement);
+               commentDiv.appendChild(messageElement);
+
+               // Insert the comment div as the first child of commentSection
+               if (commentSection.firstChild) {
+                   commentSection.insertBefore(commentDiv, commentSection.firstChild);
+               } else {
+                   commentSection.appendChild(commentDiv);
+              }
+           }
+        }
+    </script>
+</body>
+
+</html>
