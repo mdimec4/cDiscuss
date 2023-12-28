@@ -80,10 +80,10 @@
                 commentTextElement.value="";
             
                 var comment = {id: generatePostId(), message: text};
-                gun.get(pageHash).set(comment);
+                gun.get('cDiscuss').get('comments').get(pageHash).set(comment);
             });
             
-            gun.get(pageHash).map().once(function(comment) {
+            gun.get('cDiscuss').get('comments').get(pageHash).map().once(function(comment) {
             	comment.time = GUN.state.is(comment, 'message');
             
 		commentsOrderdArray.push(comment);
