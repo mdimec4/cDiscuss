@@ -6,6 +6,7 @@
 <body>
     <script src="https://cdn.jsdelivr.net/npm/gun/gun.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/gun/sea.js"></script>
+    <!--<script src="https://cdn.jsdelivr.net/npm/gun/axe.js"></script>-->
     <script>
         // based on: https://github.com/fireship-io/gun-chat
         const gun = GUN();
@@ -17,14 +18,14 @@
         var password = "pass12345678";
         
         if(!user.is) {
-        	//signup(username, password);
+        	signup(username, password);
         	login(username, password);
         }
         
         gun.on('auth', function(ack) {
     	console.log("AUTH " + ack);
 
-        gun.get(pageId).get('comments').map().once(function(messageData) {
+        user.get(pageId).get('comments').map().on(function(messageData) {
         	console.log(messageData);
                 gun.user(messageData).get('alias').then(function(who) {
 	            var when = GUN.state.is(messageData, 'what');
@@ -33,11 +34,10 @@
 		});
             });
 
-	var messageData = user.get('all').set({ what: "comment content1"});
-	gun.get(pageId).get("comments").set(messageData);
-	
-	var messageData2 = user.get('all').set({ what: "comment content2"});
-	gun.get(pageId).get("comments").set(messageData2);
+
+	user.get(pageId).get("comments").set({ what: "comment content1"});
+
+	user.get(pageId).get("comments").set({ what: "comment content2"});
     })
         
         
