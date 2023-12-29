@@ -35,7 +35,7 @@
             overflow-wrap: break-word;
         }
 
-        .comment-form-error {
+        .form-error {
           color: red;
         }
     </style>
@@ -47,7 +47,7 @@
     <!--<script src="https://cdn.jsdelivr.net/npm/gun/axe.js"></script>-->
     
     
-    <div id="commentFormError" class="comment-form-error"></div>
+    <div id="formError" class="form-error"></div>
     <form id="commentForm" style="visibility: hidden;">
         <textarea id="commentText" rows="5" cols="100" name="newComment">  
         </textarea>
@@ -67,6 +67,7 @@
         
         sha256(window.location.href).then(function (pageHash) {
              if(!user.is) {
+                 console.log("!user.is")
                 var username = "edi"; // TODO create UI for signup/login
         	var password = "pass12345678";
         	signup(username, password);
@@ -89,10 +90,10 @@
                         return;
                     }
                    if (text.length > commentLenLimit) {
-                      setCommentFormError("Comment is to long. Limit is " + commentLenLimit.toString() + " chars!");
+                      setformError("Comment is to long. Limit is " + commentLenLimit.toString() + " chars!");
                      return;
                    }
-                   clearCommentFormError();
+                   clearformError();
 
                    commentTextElement.value="";
             
@@ -146,14 +147,14 @@
            });
         }
        
-       function setCommentFormError(msg) {
-         const commentFormError = document.getElementById("commentFormError");
-         commentFormError.textContent = msg;
+       function setformError(msg) {
+         const formError = document.getElementById("formError");
+         formError.textContent = msg;
        }
 
-       function clearCommentFormError() {
-         const commentFormError = document.getElementById("commentFormError");
-         commentFormError.textContent = "";
+       function clearformError() {
+         const formError = document.getElementById("formError");
+         formError.textContent = "";
        }
 
        function clearCommentSection() {
