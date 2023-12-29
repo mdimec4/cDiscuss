@@ -24,7 +24,7 @@
         gun.on('auth', function(ack) {
     	console.log("AUTH " + ack);
 
-        gun.get(pageId).get('comments').map().once(function(messageData) {
+        gun.get(pageId).get('comments').map().on(function(messageData) {
         	console.log(messageData);
                 gun.user(messageData).get('alias').then(function(who) {
 	            var when = GUN.state.is(messageData, 'what');
