@@ -48,12 +48,25 @@
     
     
     <div id="formError" class="form-error"></div>
+ 
+    <form id="loginForm" style="visibility: hidden;">
+        <label for="username">Username</label>
+        <input name="username" id="usernameInput" minlength="3" maxlength="16" />
+
+        <label for="password">Password</label>
+        <input name="password" id="passwordInput" type="password" />
+
+        <button id="loginButton">Login</button>
+        <button id="signUpButton">Sign Up</button>
+    </form>
+    
     <form id="commentForm" style="visibility: hidden;">
         <textarea id="commentText" rows="5" cols="100" name="newComment">  
         </textarea>
         <br/>
         <button id="commentButton">submit</button>
     </form>
+    
     <div id="commentSection">
       <!-- Comment section UI here -->
     </div>
@@ -66,20 +79,54 @@
         const user = gun.user().recall({sessionStorage: true})
         
         sha256(window.location.href).then(function (pageHash) {
-             if(!user.is) {
-                 console.log("!user.is")
-                var username = "edi"; // TODO create UI for signup/login
-        	var password = "pass12345678";
-        	signup(username, password);
-        	login(username, password);
-             }
+            const loginButtonElement = document.getElementById("loginButton");
+            loginButtonElement.addEventListener("click", function(event) {
+                event.preventDefault()
+                
+                var usernameInputElement = document.getElementById("usernameInput");
+                var username = usernameInputElement.value;
+                if(!username) {
+                    return;
+                }
+                
+                var passwordInputElement = document.getElementById("passwordInput");
+                var password = passwordInputElement.value;
+                if(!username) {
+                    return;
+                }
+                
+                console.log(password);
+                login(username, password);
+            });
+            
+            const signUpButtonElement = document.getElementById("signUpButton");
+            signUpButtonElement.addEventListener("click", function(event) {
+                event.preventDefault()
+                
+                var usernameInputElement = document.getElementById("usernameInput");
+                var username = usernameInputElement.value;
+                if(!username) {
+                    return;
+                }
+                
+                var passwordInputElement = document.getElementById("passwordInput");
+                var password = passwordInputElement.value;
+                if(!username) {
+                    return;
+                }
+                
+                console.log(password);
+                signup(username, password);
+            });
+        
+            if(!user.is) {
+               makeLoginFormVisible();
+               makeCommentFormHidden();
+            }
         
             gun.on('auth', function(ack) {
                 console.log("AUTH");
-                
-                const commentForm = document.getElementById("commentForm");
-                commentForm.style = "visibility: visible;";
-                
+                       
                 const commentButtonElement = document.getElementById("commentButton");
                 commentButtonElement.addEventListener("click", function(event) {
                     event.preventDefault()
@@ -101,6 +148,9 @@
                    var userComment = user.get('all').set(comment);
                    gun.get('cDiscuss').get(pageHash).get('comments').set(userComment);
                });
+                
+                makeLoginFormHidden();
+                makeCommentFormVisible();
              });
             
             
@@ -118,8 +168,7 @@
             
         });
         
-
-        
+      
        function sha256(str) {
            return crypto.subtle.digest("SHA-256", new TextEncoder("utf-8").encode(str)).then(buf => {
                return Array.prototype.map.call(new Uint8Array(buf), x=>(('00'+x.toString(16)).slice(-2))).join('');
@@ -155,6 +204,26 @@
        function clearformError() {
          const formError = document.getElementById("formError");
          formError.textContent = "";
+       }
+       
+      function makeLoginFormVisible() {
+ 	    const loginForm = document.getElementById("loginForm");
+            loginForm.style = "visibility: visible;";
+       }
+       
+       function makeLoginFormHidden() {
+ 	    const loginForm = document.getElementById("loginForm");
+            loginForm.style = "visibility: hidden;";
+       }
+ 
+       function makeCommentFormVisible() {
+ 	    const commentForm = document.getElementById("commentForm");
+            commentForm.style = "visibility: visible;";
+       }
+       
+       function makeCommentFormHidden() {
+ 	    const commentForm = document.getElementById("commentForm");
+            commentForm.style = "visibility: hidden;";
        }
 
        function clearCommentSection() {
