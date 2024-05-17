@@ -2,7 +2,7 @@ CREATE TABLE users (
   id BIGINT PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
   username VARCHAR (50) UNIQUE NOT NULL,
   salt CHAR(21) NOT NULL,
-  pw_hash CHAR(32) NOT NULL, -- sha256
+  pw_hash CHAR(64) NOT NULL, -- sha256
   admin_role BOOL NOT NULL DEFAULT FALSE
 );
 
@@ -11,7 +11,7 @@ CREATE INDEX idx_users_username ON users (username);
 
 CREATE TABLE comments (
  id BIGINT PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
- url_hash CHAR(32) NOT NULL, -- sha256
+ url_hash CHAR(64) NOT NULL, -- sha256
  id_user BIGINT,
  dt_created TIMESTAMP WITHOUT TIME ZONE NOT NULL,
  comment_body TEXT NOT NULL,

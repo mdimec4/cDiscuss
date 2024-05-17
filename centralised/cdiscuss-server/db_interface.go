@@ -7,7 +7,7 @@ import "crypto/sha256"
 
 const (
 	saltLen        = 21
-	urlHashLen     = 32 // sha256
+	urlHashLen     = 64 // sha256
 	usernameMaxLen = 50
 )
 

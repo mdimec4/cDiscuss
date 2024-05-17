@@ -5,9 +5,10 @@ import "time"
 import "log/slog"
 import "crypto/sha256"
 
+var db databseServiceItf
+
 func main() {
-	var db databseServiceItf
-	db, err := newPostgresAdapter("postgresql://localhost:5432/cDiscuss?sslmode=disable")
+	db, err := newPostgresAdapter("postgresql://postgres:postgres@localhost:5432/cDiscuss?sslmode=disable")
 	if err != nil {
 		slog.Error("connect", slog.Any("error", err))
 		return
