@@ -5,15 +5,10 @@ import "time"
 import "errors"
 import "crypto/sha256"
 
-var (
-	errUserAlreadyExists  = errors.New("User already exists")
-	errUserDoesntExist    = errors.New("User doesn't exist")
-	errCommentDoesntExist = errors.New("Comment doesn't exist")
-	errUserWrongPassword  = errors.New("Wrong user password")
-)
-
 const (
-	saltLen = 21
+	saltLen        = 21
+	urlHashLen     = 32 // sha256
+	usernameMaxLen = 50
 )
 
 type comment struct {

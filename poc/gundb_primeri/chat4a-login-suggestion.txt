@@ -1,0 +1,29 @@
+In reply to @mdimec4:gitter.im
+Now it somehow works. (don't know what is the difference from previous example but it seams to behave little differently). After few posts once is not triggering any more. But if i reload the page. I would see all comments that were not visible before.
+
+I thought a lot on your code and I'm going to sleep on it for now. I don't yet know how you can sort using GUN, and my instinct is to do three things:
+
+1.    save a reference to the first comment made on a post, and also save the time of that first comment to another tagged value for the page hash which is "first" or "oldest" comment (both are different)
+
+2.    Use map(key, val) on the list of comments to create an array of numbered indices based on each comment's time, minus the "oldest" comment's time index, and create two arrays: one is of time amounts relative to this, and the next comes up in p3:
+
+ 3.   iterate through the list to display the comments on the page's FIRST load and push each item as a new object in order into an array for the UI list including the time difference key mentioned in p2. ([1=> { value: gunObj, key: 35353ms}] ) Then, use an On function that only watches for changes to the comments value, and use it to update existing comment divs or create a new one in the list.
+    This isn't easy for me, so I'm thinking you'd see if it's a content change and also a time change with the data update event. If it's a new comment, see if the time is newer to the last entry in the time-indicied array and use this to either: push an item onto the end of both UI arrays for display, unshift an item onto the beginning if it's also an update to /oldest content, or as it might be neither, try this: maybe slice the time-coded JS indicied array up to the key of the time difference, count the length of the JS array to get the number of the divs before where you're moving/creating the new div, and insert it into the enumerated array in that spot alongside the HTML elements. 🤔
+    
+    
+------------------------------------------------ bullet-catcher
+ Also I have another question that worries me. I want the comments to be stored persistently (this is why I also intend to run my own relay server).  As I understand things any bad actor could can quite easily delete all public comments by doing something like "gun.get('cDiscuss').get(pageHash).get('comments').put(null);" or even "gun.get('cDiscuss').put(null);". Im I correct and how to correctly mitigate that?
+
+This is long, ongoing conversation within GUN, as there are many layers to how to safeguard GUN databases, and each GUN service using GUN will have their own needs and methods of what and how they restrict. Search the chat for info on gun-restrict, bullet-catcher, and Navpreet's most recent messages about this same issue. 🤔
+
+
+    @SuaYoo Hi! I been checking out your repo. Would you mind explaining what you mean by "access control with JWT + certificates"? Did you have an example? Thx
+
+.puts are limited through bullet catcher (https://github.com/zrrrzzt/bullet-catcher) here's the example using bullet-catcher + jsonwebtoken: https://github.com/SuaYoo/gundb-react-express-auth-example/blob/main/server/server.js#L23
+
+I have been testing the bullet-catcher code successfully for the last few day, I abstracted it too since it is essentially just one function. Make sure you run Gun.on('opt'... code before calling the Gun constructor.
+
+
+-------------------- gun-restrict
+https://github.com/gundb/gun-restrict-examples/tree/master
+

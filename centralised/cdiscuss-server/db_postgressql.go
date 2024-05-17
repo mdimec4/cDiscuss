@@ -37,6 +37,10 @@ func (postgresAdapter postgresAdapter) closeDb() error {
 
 // implement databseServiceItf interface
 func (postgresAdapter postgresAdapter) listPageComments(urlHash string, offset uint64, count uint64) (*pageComments, error) {
+	if len(urlHash) != urlHashLen {
+		return nil, errUrlHashLen
+	}
+
 	tx, err := postgresAdapter.db.BeginTx(context.Background(), &sql.TxOptions{Isolation: sql.LevelReadCommitted, ReadOnly: true})
 	if err != nil {
 		return nil, fmt.Errorf("Failed to read comments (create transaction): %w", err)
@@ -70,6 +74,10 @@ func (postgresAdapter postgresAdapter) listPageComments(urlHash string, offset u
 }
 
 func getCommentsTotalCount(tx *sql.Tx, urlHash string) (uint64, error) {
+	if len(urlHash) != urlHashLen {
+		return 0, errUrlHashLen
+	}
+
 	const query = "SELECT COUNT(*) FROM comments WHERE url_hash=$1"
 	var row *sql.Row = tx.QueryRow(query, urlHash)
 
@@ -82,6 +90,10 @@ func getCommentsTotalCount(tx *sql.Tx, urlHash string) (uint64, error) {
 }
 
 func getComments(tx *sql.Tx, urlHash string, offset uint64, count uint64) ([]commentJoinedWithUser, error) {
+	if len(urlHash) != urlHashLen {
+		return nil, errUrlHashLen
+	}
+
 	const query = `SELECT cm.id, us.username, cm.dt_created, cm.comment_body FROM comments AS cm
 	INNER JOIN users AS us ON cm.id_user=us.id
 	WHERE cm.url_hash=$1 
@@ -129,9 +141,10 @@ func (postgresAdapter postgresAdapter) getComment(id int64) (*comment, error) {
 }
 
 func (postgresAdapter postgresAdapter) createComment(urlHash string, idUser int64, dtCreated time.Time, commentBody string) (int64, error) {
-	if urlHash == "" {
-		return -1, fmt.Errorf("Failed to crate a comment idUser=%d: empty url hash", idUser)
+	if len(urlHash) != urlHashLen {
+		return -1, errUrlHashLen
 	}
+
 	if commentBody == "" {
 		return -1, fmt.Errorf("Failed to crate a comment urlHash=%s, idUser=%d: empty comment body", urlHash, idUser)
 	}
@@ -158,6 +171,9 @@ func (postgresAdapter postgresAdapter) deleteComment(id int64) error {
 func (postgresAdapter postgresAdapter) createUser(username string, password string, adminRole bool) (*user, error) {
 	if username == "" {
 		return nil, fmt.Errorf("Error creating user: empty username")
+	}
+	if len(username) > usernameMaxLen {
+		return nil, errUsernameToLong
 	}
 	if password == "" {
 		return nil, fmt.Errorf("Error creating user: empty password")
@@ -209,12 +225,16 @@ func (postgresAdapter postgresAdapter) createUser(username string, password stri
 }
 
 func getUserId(tx *sql.Tx, username string) (int64, error) {
+	if len(username) > usernameMaxLen {
+		return -1, errUsernameToLong
+	}
+
 	const getQuery = "SELECT id FROM users WHERE username=$1 LIMIT 1"
 	var row *sql.Row = tx.QueryRow(getQuery, username)
 	var userId int64
 	err := row.Scan(&userId)
 	if err != nil {
-		return 0, err
+		return -1, err
 	}
 	return userId, nil
 }
@@ -301,6 +321,10 @@ func (postgresAdapter postgresAdapter) modifyUserAdminRole(id int64, adminRole b
 }
 
 func (postgresAdapter postgresAdapter) authenticateUser(username string, password string) (*user, error) {
+	if len(username) > usernameMaxLen {
+		return nil, errUsernameToLong
+	}
+
 	const query = "SELECT id, username, salt, pw_hash, admin_role FROM users WHERE username=$1 LIMIT 1"
 	var row *sql.Row = postgresAdapter.db.QueryRow(query, username)
 
@@ -342,6 +366,10 @@ func (postgresAdapter postgresAdapter) getUser(id int64) (*user, error) {
 }
 
 func (postgresAdapter postgresAdapter) getUserByUsername(username string) (*user, error) {
+	if len(username) > usernameMaxLen {
+		return nil, errUsernameToLong
+	}
+
 	const query = "SELECT id, username, admin_role FROM users WHERE username=$1 LIMIT 1"
 	var row *sql.Row = postgresAdapter.db.QueryRow(query, username)
 
