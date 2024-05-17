@@ -5,12 +5,6 @@ import "time"
 import "errors"
 import "crypto/sha256"
 
-const (
-	saltLen        = 21
-	urlHashLen     = 64 // sha256
-	usernameMaxLen = 50
-)
-
 type comment struct {
 	Id          int64     `json: id`
 	UrlHash     string    `json: urlHash`
