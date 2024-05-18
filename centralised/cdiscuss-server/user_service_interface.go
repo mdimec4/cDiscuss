@@ -9,7 +9,7 @@ const (
 	usernameMaxLen                       = 50
 	passwordMinLen                       = 21
 	passwordMaxLen                       = 100
-	proofOfWorkCreateUserRequiredHardnes = 19
+	proofOfWorkCreateUserRequiredHardnes = uint(19)
 	proofOfWorkCreteUserMaxAge           = time.Duration(5 * time.Minute)
 )
 
@@ -18,7 +18,7 @@ type userServiceItf interface {
 	logout() error
 	getSessionUser(sessionCookie *http.Cookie) *user
 
-	getCreateUserProofOfWorkRequredHardnes() int
+	getCreateUserProofOfWorkRequredHardnes() uint
 
 	// creates new user in db and creates session
 	createUser(powString string, username string, password string) (*http.Cookie, error)
