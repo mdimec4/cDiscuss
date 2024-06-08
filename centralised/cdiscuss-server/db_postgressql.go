@@ -392,3 +392,18 @@ func (postgresAdapter postgresAdapter) deleteUser(id int64) error {
 	}
 	return nil
 }
+
+func (postgresAdapter postgresAdapter) getPowToken(token string) (*time.Time, error) {
+	const query = "SELECT dt_expires FROM user_seassions WHERE pow_token=$1"
+	var row *sql.Row = postgresAdapter.db.QueryRow(query, token)
+
+	var dtExpires time.Time
+	err := row.Scan(&dtExpires)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("Failed to query a pow token='%s': %w", token, err)
+	}
+	return &dtExpires, nil
+}
