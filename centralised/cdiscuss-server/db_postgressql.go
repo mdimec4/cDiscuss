@@ -94,8 +94,8 @@ func getComments(tx *sql.Tx, urlHash string, offset uint64, count uint64) ([]com
 		return nil, errUrlHashLen
 	}
 
-	const query = `SELECT cm.id, us.username, cm.dt_created, cm.comment_body FROM comments AS cm
-	INNER JOIN users AS us ON cm.id_user=us.id
+	const query = `SELECT cm.id, us.username, cm.dt_created, cm.comment_body FROM comments cm
+	INNER JOIN users us ON cm.id_user=us.id
 	WHERE cm.url_hash=$1 
 	ORDER BY cm.id DESC OFFSET $2 LIMIT $3`
 
@@ -221,7 +221,7 @@ func (postgresAdapter postgresAdapter) createUser(username string, password stri
 	if err != nil {
 		return nil, fmt.Errorf("Failed to commit user creation: %w", err)
 	}
-	return &user{id: userId, username: username, adminRole: false}, nil
+	return &user{id: userId, username: username, adminRole: adminRole}, nil
 }
 
 func getUserId(tx *sql.Tx, username string) (int64, error) {
@@ -394,7 +394,7 @@ func (postgresAdapter postgresAdapter) deleteUser(id int64) error {
 }
 
 func (postgresAdapter postgresAdapter) getPowToken(token string) (*time.Time, error) {
-	const query = "SELECT dt_expires FROM user_seassions WHERE pow_token=$1"
+	const query = "SELECT dt_expires FROM used_pow_tokens WHERE pow_token=$1"
 	var row *sql.Row = postgresAdapter.db.QueryRow(query, token)
 
 	var dtExpires time.Time
@@ -406,4 +406,77 @@ func (postgresAdapter postgresAdapter) getPowToken(token string) (*time.Time, er
 		return nil, fmt.Errorf("Failed to query a pow token='%s': %w", token, err)
 	}
 	return &dtExpires, nil
+}
+
+func (postgresAdapter postgresAdapter) createPowToken(token string, dtExpires time.Time) error {
+	const queryInsert = "INSERT INTO used_pow_tokens (pow_token, dt_expires) VALUES($1, $2)"
+	_, err := postgresAdapter.db.Exec(queryInsert, token, dtExpires)
+	if err != nil {
+		return fmt.Errorf("Failed to insert pow token='%s': %w", token, err)
+	}
+	return nil
+}
+
+func (postgresAdapter postgresAdapter) deletePowToken(token string) error {
+	const query = "DELETE FROM used_pow_tokens WHERE pow_token=$1"
+	_, err := postgresAdapter.db.Exec(query, token)
+	if err != nil {
+		return fmt.Errorf("Failed to delete pow token='%s': %w", token, err)
+	}
+	return nil
+}
+
+func (postgresAdapter postgresAdapter) deletePowTokensThatExpired(now time.Time) error {
+	const query = "DELETE FROM used_pow_tokens WHERE dt_expires <= $1"
+	_, err := postgresAdapter.db.Exec(query, now)
+	if err != nil {
+		return fmt.Errorf("Failed to delete pow tokens<='%v': %w", err)
+	}
+	return nil
+}
+
+func (postgresAdapter postgresAdapter) getSessionToken(token string) (*time.Time, *user, error) {
+	const query = `SELECT s.date_expires, usr.id, usr.username, usr.admin_role FROM user_sessions s 
+	INNER JOIN users usr ON usr.id = s.id_user
+	WHERE pow_token=$1`
+	var row *sql.Row = postgresAdapter.db.QueryRow(query, token)
+
+	var dtExpires time.Time
+	var user user
+
+	err := row.Scan(&dtExpires, user.id, &user.username, &user.adminRole)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil, nil
+		}
+		return nil, nil, fmt.Errorf("Failed to query a seassion token='%s': %w", token, err)
+	}
+	return &dtExpires, &user, nil
+}
+
+func (postgresAdapter postgresAdapter) createSeassionToken(token string, idUser int64, dtExpires time.Time) error {
+	const queryInsert = "INSERT INTO seassion_tokens (seassion_token, id_user, dt_expires) VALUES($1, $2, $3)"
+	_, err := postgresAdapter.db.Exec(queryInsert, idUser, token, dtExpires)
+	if err != nil {
+		return fmt.Errorf("Failed to insert seassion token='%s': %w", token, err)
+	}
+	return nil
+}
+
+func (postgresAdapter postgresAdapter) deleteSeassionToken(token string) error {
+	const query = "DELETE FROM seassion_tokens WHERE seassion_token=$1"
+	_, err := postgresAdapter.db.Exec(query, token)
+	if err != nil {
+		return fmt.Errorf("Failed to delete seassion token='%s': %w", token, err)
+	}
+	return nil
+}
+
+func (postgresAdapter postgresAdapter) deleteSeassionTokensThatExpired(now time.Time) error {
+	const query = "DELETE FROM seassion_tokens WHERE dt_expires <= $1"
+	_, err := postgresAdapter.db.Exec(query, now)
+	if err != nil {
+		return fmt.Errorf("Failed to delete seassion tokens<='%v': %w", err)
+	}
+	return nil
 }

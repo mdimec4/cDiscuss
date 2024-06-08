@@ -11,6 +11,8 @@ var (
 	errPasswordToShort    = newValidationError("Password is too short")
 	errPasswordToLong     = newValidationError("Password is too long")
 
+	errInvalidPowToken = newValidationError("Invalid POW token")
+
 	errUserSessionIsNotValid = newValidationError("User session is not valid or doesn't exist")
 )
 

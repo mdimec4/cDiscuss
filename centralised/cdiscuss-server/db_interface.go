@@ -51,12 +51,12 @@ type databseServiceItf interface {
 	getPowToken(token string) (*time.Time, error)
 	createPowToken(token string, dtExpires time.Time) error
 	deletePowToken(token string) error
-	deletePowTokensThatExpireBeforeNow(now time.Time) error
+	deletePowTokensThatExpired(now time.Time) error
 
 	getSessionToken(token string) (*time.Time, *user, error)
-	createSeassionToken(token string, time.Time dtExpires) error
+	createSeassionToken(token string, idUser int64, dtExpires time.Time) error
 	deleteSeassionToken(token string) error
-	deleteSeassionTokensThatExpireBeforeNow(now time.Time) error
+	deleteSeassionTokensThatExpired(now time.Time) error
 }
 
 func generateSalt() string {

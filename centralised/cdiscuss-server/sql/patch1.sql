@@ -25,7 +25,7 @@ CREATE TABLE comments (
 CREATE INDEX idx_comments_url_hash ON comments (url_hash);
 
 CREATE TABLE used_pow_tokens (
-  pow_token VARCHAR(110) PRIMARY KEY NOT NULL,
+  pow_token VARCHAR(104) PRIMARY KEY NOT NULL,
   dt_expires TIMESTAMP WITHOUT TIME ZONE NOT NULL
 );
 
