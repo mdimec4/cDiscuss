@@ -21,6 +21,7 @@ type userServiceItf interface {
 	getCreateUserProofOfWorkRequredHardnes() uint
 
 	// creates new user in db and creates session
+	// TODO validate username ^[A-Za-z0-9]{1,50}$ because ':' char is not allowed (POW token)
 	createUser(powString string, username string, password string) (*http.Cookie, error)
 
 	modifyPassword(oldPassword string, newPassword string) error

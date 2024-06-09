@@ -25,7 +25,7 @@
          return Math.floor(Math.random() * Number.MAX_SAFE_INTEGER/2);
        }
        
-      // TODO validate that username doesn't contain ':'. For example: [A-Za-z0-9]{1,50}
+      // TODO validate that username doesn't contain ':'. For example: ^[A-Za-z0-9]{1,50}$
       function createProofString(requiredNoInitialZeroBits, username, timestamp, num) {
       	return requiredNoInitialZeroBits.toString() + ":" + username + ":" + timestamp.toString() + ":" + num;
       }
