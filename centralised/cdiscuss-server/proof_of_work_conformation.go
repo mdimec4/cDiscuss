@@ -1,11 +1,15 @@
 package main
 
-import "sync"
-import "time"
-import "strings"
-import "strconv"
-import "errors"
-import "log/slog"
+import (
+	"crypto/sha256"
+	"errors"
+	"fmt"
+	"log/slog"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
+)
 
 type proofOfWorkConformation struct {
 	alreadyUsedTokensMap *sync.Map
@@ -101,7 +105,7 @@ func (powConform *proofOfWorkConformation) storeToken(token string, now time.Tim
 		err := powConform.databaseService.createPowToken(token, expiresTime)
 		return err
 	}
-	return nipowConform.databaseServicel
+	return nil
 }
 
 func (powConform *proofOfWorkConformation) isTokenUsedAndForgetIfExpired(token string) (bool, error) {
@@ -131,7 +135,17 @@ func (powConform *proofOfWorkConformation) isTokenUsedAndForgetIfExpired(token s
 		foundInMemory = false
 	}
 
+	if !tokenFound {
+		return false, nil
+	}
+
 	isTokenExpired := isExpired(time.Now(), expiresTime)
+
+	if tokenFound && !foundInMemory && !isTokenExpired {
+		// cache non expired dbToken
+		powConform.alreadyUsedTokensMap.Store(token, expiresTime)
+	}
+
 	if tokenFound && isTokenExpired {
 		tokenFound = false
 
@@ -142,11 +156,6 @@ func (powConform *proofOfWorkConformation) isTokenUsedAndForgetIfExpired(token s
 			powConform.databaseService.deletePowToken(token)
 		}
 
-	}
-
-	if tokenFound && !foundInMemory && !isTokenExpired {
-		// cache non expired dbToken
-		powConform.alreadyUsedTokensMap.Store(token, expiresTime)
 	}
 
 	return tokenFound, nil
@@ -192,14 +201,12 @@ func parsePowToken(token string) (*parsedPowToken, error) {
 		return nil, errInvalidPowToken
 	}
 
-	return &parsedPowToken{hardnes: uint(hardnes), username: username,
-			dtCreatedReported: dtCreatedReported, randNum: randNum},
-		nil
+	parsedToken := &parsedPowToken{hardnes: uint(hardnes), username: username,
+		dtCreatedReported: dtCreatedReported, randNum: randNum}
+	return parsedToken, nil
 }
 
 func (powConform *proofOfWorkConformation) isTokenAceptableStore(token string, requiredHardnes uint, username string) (bool, error) {
-	var timestampTimeDiff time.Duration = 0
-
 	isTokenUsed, err := powConform.isTokenUsedAndForgetIfExpired(token)
 	if err != nil {
 		return false, err
@@ -222,18 +229,32 @@ func (powConform *proofOfWorkConformation) isTokenAceptableStore(token string, r
 	}
 
 	now := time.Now()
-	if parsedPowToken.dtCreatedReported.After(now) {
-		timestampTimeDiff = parsedPowToken.dtCreatedReported.Since(now)
-	} else {
-		timestampTimeDiff = parsedPowToken.dtCreatedReported.Until(now)
-	}
-
+	timestampTimeDiff := parsedPowToken.dtCreatedReported.Sub(now).Abs()
 	if timestampTimeDiff >= powConform.tokeExpiresAge {
 		return false, errInvalidPowToken
 	}
 
-	// TODO check token, Count sha256 zero bits and compare them to required hardnes
+	var sumSha256 [sha256.Size]byte = sha256.Sum256([]byte(token))
+	hashLeadingZeroBitCount := countSha256LeadingZeroBits(sumSha256)
+	if hashLeadingZeroBitCount < requiredHardnes {
+		return false, errInvalidPowToken
+	}
 
 	powConform.storeToken(token, now)
 	return true, nil
+}
+
+func countSha256LeadingZeroBits(sumSha256 [sha256.Size]byte) uint {
+	var zeroBitCount uint = 0
+
+	for i := 0; i < sha256.Size; i++ {
+		for j := 0; j < 8; j++ {
+			if ((sumSha256[i] >> (7 - j)) & 0x01) == 0 {
+				zeroBitCount++
+			} else {
+				return zeroBitCount
+			}
+		}
+	}
+	return zeroBitCount
 }

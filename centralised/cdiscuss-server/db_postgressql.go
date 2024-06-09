@@ -430,7 +430,7 @@ func (postgresAdapter postgresAdapter) deletePowTokensThatExpired(now time.Time)
 	const query = "DELETE FROM used_pow_tokens WHERE dt_expires <= $1"
 	_, err := postgresAdapter.db.Exec(query, now)
 	if err != nil {
-		return fmt.Errorf("Failed to delete pow tokens<='%v': %w", err)
+		return fmt.Errorf("Failed to delete pow tokens<='%v': %w", now, err)
 	}
 	return nil
 }
@@ -476,7 +476,7 @@ func (postgresAdapter postgresAdapter) deleteSeassionTokensThatExpired(now time.
 	const query = "DELETE FROM seassion_tokens WHERE dt_expires <= $1"
 	_, err := postgresAdapter.db.Exec(query, now)
 	if err != nil {
-		return fmt.Errorf("Failed to delete seassion tokens<='%v': %w", err)
+		return fmt.Errorf("Failed to delete seassion tokens<='%v': %w", now, err)
 	}
 	return nil
 }
