@@ -22,4 +22,10 @@ func TestParsePowToken(t *testing.T) {
 	if parsedPowToken.dtCreatedReported != time.UnixMilli(1717855224906) {
 		t.Errorf("Wrong timestamp: %v", parsedPowToken.dtCreatedReported)
 	}
+	if parsedPowToken.dtCreatedReported != time.UnixMilli(1717855224906) {
+		t.Errorf("Wrong timestamp: %v", parsedPowToken.dtCreatedReported)
+	}
+	if parsedPowToken.randNum != 3764117886647529 {
+		t.Errorf("Wrong randNum: %v", parsedPowToken.randNum)
+	}
 }
