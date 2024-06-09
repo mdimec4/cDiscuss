@@ -10,7 +10,7 @@ const (
 	passwordMinLen                       = 21
 	passwordMaxLen                       = 100
 	proofOfWorkCreateUserRequiredHardnes = uint(19)
-	proofOfWorkCreteUserMaxAge           = time.Duration(5 * time.Minute)
+	proofOfWorkCreteUserExpiresAge       = time.Duration(5 * time.Minute)
 )
 
 type userServiceItf interface {
