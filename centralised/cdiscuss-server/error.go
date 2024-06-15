@@ -1,28 +1,34 @@
 package main
 
+import (
+	"net/http"
+)
+
 var (
-	errUserAlreadyExists  = newValidationError("User already exists")
-	errUserDoesntExist    = newValidationError("User doesn't exist")
-	errCommentDoesntExist = newValidationError("Comment doesn't exist")
-	errUserWrongPassword  = newValidationError("Wrong user password")
-	errUrlHashLen         = newValidationError("Wrong URL hash length")
-	errUsernameToShort    = newValidationError("Username is too short")
-	errUsernameToLong     = newValidationError("Username is too long")
-	errPasswordToShort    = newValidationError("Password is too short")
-	errPasswordToLong     = newValidationError("Password is too long")
+	errUserAlreadyExists  = newValidationError("User already exists", http.StatusConflict)
+	errUserDoesntExist    = newValidationError("User doesn't exist", http.StatusUnauthorized)
+	errCommentDoesntExist = newValidationError("Comment doesn't exist", http.StatusNotFound)
+	errUserWrongPassword  = newValidationError("Wrong user password", http.StatusUnauthorized)
+	errUrlHashLen         = newValidationError("Wrong URL hash length", http.StatusBadRequest)
+	errUsernameToShort    = newValidationError("Username is too short", http.StatusBadRequest)
+	errUsernameToLong     = newValidationError("Username is too long", http.StatusBadRequest)
+	errPasswordToShort    = newValidationError("Password is too short", http.StatusBadRequest)
+	errPasswordToLong     = newValidationError("Password is too long", http.StatusBadRequest)
 
-	errInvalidPowToken = newValidationError("Invalid POW token")
+	errInvalidPowToken = newValidationError("Invalid POW token", http.StatusUnauthorized)
 
-	errUserSessionIsNotValid = newValidationError("User session is not valid or doesn't exist")
+	errUserSessionIsNotValid = newValidationError("User session is not valid or doesn't exist", http.StatusUnauthorized)
 )
 
 type validationError struct {
-	errStr string
+	ErrStr     string // exported so it can ce used as json DTO for error
+	HttpStatus int
 }
 
-func newValidationError(errStr string) validationError {
+func newValidationError(errStr string, httpStatus int) validationError {
 	var err validationError
-	err.errStr = errStr
+	err.ErrStr = errStr
+	err.HttpStatus = httpStatus
 	return err
 }
 

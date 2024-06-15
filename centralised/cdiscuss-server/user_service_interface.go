@@ -4,13 +4,16 @@ import "time"
 import "net/http"
 
 const (
-	saltLen                              = 21
-	usernameMinLen                       = 4
-	usernameMaxLen                       = 50
-	passwordMinLen                       = 21
-	passwordMaxLen                       = 100
-	proofOfWorkCreateUserRequiredHardnes = uint(19)
-	proofOfWorkCreteUserExpiresAge       = time.Duration(5 * time.Minute)
+	saltLen                              int           = 21
+	usernameMinLen                       int           = 4
+	usernameMaxLen                       int           = 50
+	passwordMinLen                       int           = 21
+	passwordMaxLen                       int           = 100
+	proofOfWorkCreateUserRequiredHardnes int           = 19
+	proofOfWorkCreteUserExpiresAge       time.Duration = 7 * time.Minute
+	proofOfWorkCleanupPeriod             time.Duration = 10 * time.Minute
+	seassionExpiresAge                   time.Duration = time.Hour * 24 * 30 * 6 // rughly six mounthsa
+	seassionCleanUpPeriod                time.Duration = time.Hour
 )
 
 type userServiceItf interface {

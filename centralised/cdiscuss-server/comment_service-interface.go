@@ -1,5 +1,5 @@
 package main
 
 const (
-	urlHashLen = 64 // sha256
+	urlHashLen int = 64 // sha256
 )
