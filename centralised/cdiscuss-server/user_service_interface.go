@@ -17,8 +17,6 @@ const (
 )
 
 type userServiceItf interface {
-	login(username string, password string) (*http.Cookie, error)
-	logout() error
 	getSessionUser(sessionCookie *http.Cookie) *user
 
 	getCreateUserProofOfWorkRequredHardnes() uint
