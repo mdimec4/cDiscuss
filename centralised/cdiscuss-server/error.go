@@ -29,8 +29,8 @@ var (
 )
 
 type validationError struct {
-	ErrStr     string // exported so it can ce used as json DTO for error
-	HttpStatus int
+	ErrStr     string `json: err`
+	HttpStatus int    `json: status`
 }
 
 func newValidationError(errStr string, httpStatus int) validationError {
@@ -49,8 +49,8 @@ func (err validationError) getHttpStatus() int {
 }
 
 type internalServerError struct {
-	ErrStr     string // exported so it can ce used as json DTO for error
-	HttpStatus int
+	ErrStr     string `json: err`
+	HttpStatus int    `json: status`
 }
 
 func newInternalServerError(errStr string, httpStatus int) internalServerError {
