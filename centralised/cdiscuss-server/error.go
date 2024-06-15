@@ -4,6 +4,11 @@ import (
 	"net/http"
 )
 
+type errWithHttpStatus interface {
+	error
+	getHttpStatus() int
+}
+
 var (
 	errInternalServer = newInternalServerError("Internal server error!", http.StatusInternalServerError)
 
@@ -36,7 +41,11 @@ func newValidationError(errStr string, httpStatus int) validationError {
 }
 
 func (err validationError) Error() string {
-	return err.errStr
+	return err.ErrStr
+}
+
+func (err validationError) getHttpStatus() int {
+	return err.HttpStatus
 }
 
 type internalServerError struct {
@@ -50,6 +59,11 @@ func newInternalServerError(errStr string, httpStatus int) internalServerError {
 	err.HttpStatus = httpStatus
 	return err
 }
+
 func (err internalServerError) Error() string {
-	return err.errStr
+	return err.ErrStr
+}
+
+func (err internalServerError) getHttpStatus() int {
+	return err.HttpStatus
 }
