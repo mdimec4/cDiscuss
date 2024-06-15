@@ -10,9 +10,7 @@ const (
 	passwordMinLen                       int           = 21
 	passwordMaxLen                       int           = 100
 	proofOfWorkCreateUserRequiredHardnes int           = 19
-	proofOfWorkCreteUserExpiresAge       time.Duration = 7 * time.Minute
-	proofOfWorkCleanupPeriod             time.Duration = 10 * time.Minute
-	seassionExpiresAge                   time.Duration = time.Hour * 24 * 30 * 6 // rughly six mounthsa
+	seassionExpiresAge                   time.Duration = time.Hour * 24 * 30 * 6 // rughly six months
 	seassionCleanUpPeriod                time.Duration = time.Hour
 )
 
