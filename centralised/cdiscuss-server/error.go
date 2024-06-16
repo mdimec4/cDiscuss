@@ -29,41 +29,50 @@ var (
 )
 
 type validationError struct {
-	ErrStr     string `json: err`
-	HttpStatus int    `json: status`
+	errStr     string
+	httpStatus int
 }
 
 func newValidationError(errStr string, httpStatus int) validationError {
 	var err validationError
-	err.ErrStr = errStr
-	err.HttpStatus = httpStatus
+	err.errStr = errStr
+	err.httpStatus = httpStatus
 	return err
 }
 
 func (err validationError) Error() string {
-	return err.ErrStr
+	return err.errStr
 }
 
 func (err validationError) getHttpStatus() int {
-	return err.HttpStatus
+	return err.httpStatus
 }
 
 type internalServerError struct {
-	ErrStr     string `json: err`
-	HttpStatus int    `json: status`
+	errStr     string
+	httpStatus int
 }
 
 func newInternalServerError(errStr string, httpStatus int) internalServerError {
 	var err internalServerError
-	err.ErrStr = errStr
-	err.HttpStatus = httpStatus
+	err.errStr = errStr
+	err.httpStatus = httpStatus
 	return err
 }
 
 func (err internalServerError) Error() string {
-	return err.ErrStr
+	return err.errStr
 }
 
 func (err internalServerError) getHttpStatus() int {
-	return err.HttpStatus
+	return err.httpStatus
+}
+
+type errorDTO struct {
+	ErrStr     string `json: err`
+	HttpStatus int    `json: status`
+}
+
+func newErrorDTO(errHttp errWithHttpStatus) errorDTO {
+	return errorDTO{ErrStr: errHttp.Error(), HttpStatus: errHttp.getHttpStatus()}
 }

@@ -9,6 +9,8 @@ import (
 	"time"
 )
 
+// implements interfaces: databseServiceCommentItf, databseServiceUserItf,
+// databseServiceProofOfWorkItf and databseServiceSessionItf
 type postgresAdapter struct {
 	db *sql.DB
 }
@@ -35,7 +37,6 @@ func (postgresAdapter postgresAdapter) closeDb() error {
 	return nil
 }
 
-// implement databseServiceItf interface
 func (postgresAdapter postgresAdapter) listPageComments(urlHash string, offset uint64, count uint64) (*pageComments, error) {
 	if len(urlHash) != urlHashLen {
 		return nil, errUrlHashLen

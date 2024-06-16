@@ -28,18 +28,20 @@ type commentJoinedWithUser struct {
 	CommentBody string    `json: commentBody`
 }
 
+type databseServiceCommentItf interface {
+	listPageComments(urlHash string, offset uint64, count uint64) (*pageComments, error)
+	getComment(id int64) (*comment, error)
+	createComment(urlHash string, idUser int64, dtCreated time.Time, commentBody string) (int64, error)
+	deleteComment(id int64) error
+}
+
 type user struct {
 	id        int64
 	username  string
 	adminRole bool
 }
 
-type databseServiceItf interface {
-	listPageComments(urlHash string, offset uint64, count uint64) (*pageComments, error)
-	getComment(id int64) (*comment, error)
-	createComment(urlHash string, idUser int64, dtCreated time.Time, commentBody string) (int64, error)
-	deleteComment(id int64) error
-
+type databseServiceUserItf interface {
 	createUser(username string, password string, adminRole bool) (*user, error)
 	modifyUserPassword(id int64, oldPassword string, newPassword string) error
 	modifyUserAdminRole(id int64, adminRole bool) error
@@ -47,16 +49,6 @@ type databseServiceItf interface {
 	getUser(id int64) (*user, error)
 	getUserByUsername(username string) (*user, error)
 	deleteUser(id int64) error
-
-	getPowToken(token string) (*time.Time, error)
-	createPowToken(token string, dtExpires time.Time) error
-	deletePowToken(token string) error
-	deletePowTokensThatExpired(now time.Time) error
-
-	getSessionToken(token string) (*time.Time, *user, error)
-	createSeassionToken(token string, idUser int64, dtExpires time.Time) error
-	deleteSeassionToken(token string) error
-	deleteSeassionTokensThatExpired(now time.Time) error
 }
 
 func generateSalt() string {
@@ -73,4 +65,18 @@ func getPasswordAndSaltSHA256Hash(password string, salt string) (string, error) 
 	passwordAndSalt := password + salt
 	sum := sha256.Sum256([]byte(passwordAndSalt))
 	return fmt.Sprintf("%x", sum), nil
+}
+
+type databseServiceProofOfWorkItf interface {
+	getPowToken(token string) (*time.Time, error)
+	createPowToken(token string, dtExpires time.Time) error
+	deletePowToken(token string) error
+	deletePowTokensThatExpired(now time.Time) error
+}
+
+type databseServiceSessionItf interface {
+	getSessionToken(token string) (*time.Time, *user, error)
+	createSeassionToken(token string, idUser int64, dtExpires time.Time) error
+	deleteSeassionToken(token string) error
+	deleteSeassionTokensThatExpired(now time.Time) error
 }
