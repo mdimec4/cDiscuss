@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	_ "github.com/lib/pq"
 	"log/slog"
@@ -133,7 +134,7 @@ func (postgresAdapter postgresAdapter) getComment(id int64) (*comment, error) {
 	comment := &comment{}
 	err := row.Scan(&comment.Id, &comment.UrlHash, &comment.DtCreated, &comment.CommentBody)
 	if err != nil {
-		if err == sql.ErrNoRows {
+		if errors.Is(err, sql.ErrNoRows) {
 			return comment, errCommentDoesntExist
 		}
 		return nil, fmt.Errorf("Failed to query a comment id=%d: %w", id, err)
@@ -186,7 +187,7 @@ func (postgresAdapter postgresAdapter) createUser(username string, password stri
 	}
 
 	userId, err := getUserId(tx, username)
-	if err != sql.ErrNoRows {
+	if !errors.Is(err, sql.ErrNoRows) {
 		err2 := tx.Rollback()
 		if err2 != nil {
 			slog.Error("Failed to rollback user creation!", slog.Any("error", err2))
@@ -263,7 +264,7 @@ func (postgresAdapter postgresAdapter) modifyUserPassword(id int64, oldPassword 
 		if err2 != nil {
 			slog.Error("Failed to rollback user password change!", slog.Any("error", err2))
 		}
-		if err == sql.ErrNoRows {
+		if errors.Is(err, sql.ErrNoRows) {
 			return errUserDoesntExist
 		}
 		return fmt.Errorf("Error modifing user password (get user): %w", err)
@@ -334,7 +335,7 @@ func (postgresAdapter postgresAdapter) authenticateUser(username string, passwor
 	var pwHash string
 	err := row.Scan(&user.id, &user.username, &salt, &pwHash, &user.adminRole)
 	if err != nil {
-		if err == sql.ErrNoRows {
+		if errors.Is(err, sql.ErrNoRows) {
 			return nil, errUserDoesntExist
 		}
 		return nil, fmt.Errorf("Failed to authenicate a user (query a user) username='%s': %w", username, err)
@@ -358,7 +359,7 @@ func (postgresAdapter postgresAdapter) getUser(id int64) (*user, error) {
 	user := &user{}
 	err := row.Scan(&user.id, &user.username, &user.adminRole)
 	if err != nil {
-		if err == sql.ErrNoRows {
+		if errors.Is(err, sql.ErrNoRows) {
 			return nil, errUserDoesntExist
 		}
 		return nil, fmt.Errorf("Failed to query a user id=%d: %w", id, err)
@@ -377,7 +378,7 @@ func (postgresAdapter postgresAdapter) getUserByUsername(username string) (*user
 	user := &user{}
 	err := row.Scan(&user.id, &user.username, &user.adminRole)
 	if err != nil {
-		if err == sql.ErrNoRows {
+		if errors.Is(err, sql.ErrNoRows) {
 			return nil, errUserDoesntExist
 		}
 		return nil, fmt.Errorf("Failed to query a user username='%s': %w", username, err)
@@ -401,7 +402,7 @@ func (postgresAdapter postgresAdapter) getPowToken(token string) (*time.Time, er
 	var dtExpires time.Time
 	err := row.Scan(&dtExpires)
 	if err != nil {
-		if err == sql.ErrNoRows {
+		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil
 		}
 		return nil, fmt.Errorf("Failed to query a pow token='%s': %w", token, err)
@@ -436,48 +437,48 @@ func (postgresAdapter postgresAdapter) deletePowTokensThatExpired(now time.Time)
 	return nil
 }
 
-func (postgresAdapter postgresAdapter) getSessionToken(token string) (*time.Time, *user, error) {
+func (postgresAdapter postgresAdapter) getSession(tokenHash string) (*time.Time, *user, error) {
 	const query = `SELECT s.date_expires, usr.id, usr.username, usr.admin_role FROM user_sessions s 
 	INNER JOIN users usr ON usr.id = s.id_user
-	WHERE pow_token=$1`
-	var row *sql.Row = postgresAdapter.db.QueryRow(query, token)
+	WHERE session_token_hash=$1`
+	var row *sql.Row = postgresAdapter.db.QueryRow(query, tokenHash)
 
 	var dtExpires time.Time
 	var user user
 
 	err := row.Scan(&dtExpires, user.id, &user.username, &user.adminRole)
 	if err != nil {
-		if err == sql.ErrNoRows {
+		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil, nil
 		}
-		return nil, nil, fmt.Errorf("Failed to query a seassion token='%s': %w", token, err)
+		return nil, nil, fmt.Errorf("Failed to query a seassion tokenHash='%s': %w", tokenHash, err)
 	}
 	return &dtExpires, &user, nil
 }
 
-func (postgresAdapter postgresAdapter) createSeassionToken(token string, idUser int64, dtExpires time.Time) error {
-	const queryInsert = "INSERT INTO seassion_tokens (seassion_token, id_user, dt_expires) VALUES($1, $2, $3)"
-	_, err := postgresAdapter.db.Exec(queryInsert, idUser, token, dtExpires)
+func (postgresAdapter postgresAdapter) createSession(tokenHash string, idUser int64, dtExpires time.Time) error {
+	const queryInsert = "INSERT INTO user_sessions (seassion_token_hash, id_user, dt_expires) VALUES($1, $2, $3)"
+	_, err := postgresAdapter.db.Exec(queryInsert, idUser, tokenHash, dtExpires)
 	if err != nil {
-		return fmt.Errorf("Failed to insert seassion token='%s': %w", token, err)
+		return fmt.Errorf("Failed to insert seassion tokenHash='%s': %w", tokenHash, err)
 	}
 	return nil
 }
 
-func (postgresAdapter postgresAdapter) deleteSeassionToken(token string) error {
-	const query = "DELETE FROM seassion_tokens WHERE seassion_token=$1"
-	_, err := postgresAdapter.db.Exec(query, token)
+func (postgresAdapter postgresAdapter) deleteSession(tokenHash string) error {
+	const query = "DELETE FROM user_sessions WHERE seassion_token_hash=$1"
+	_, err := postgresAdapter.db.Exec(query, tokenHash)
 	if err != nil {
-		return fmt.Errorf("Failed to delete seassion token='%s': %w", token, err)
+		return fmt.Errorf("Failed to delete seassion tokenHash='%s': %w", tokenHash, err)
 	}
 	return nil
 }
 
-func (postgresAdapter postgresAdapter) deleteSeassionTokensThatExpired(now time.Time) error {
-	const query = "DELETE FROM seassion_tokens WHERE dt_expires <= $1"
+func (postgresAdapter postgresAdapter) deleteSessionsThatExpired(now time.Time) error {
+	const query = "DELETE FROM user_sessions WHERE dt_expires <= $1"
 	_, err := postgresAdapter.db.Exec(query, now)
 	if err != nil {
-		return fmt.Errorf("Failed to delete seassion tokens<='%v': %w", now, err)
+		return fmt.Errorf("Failed to delete seassions <='%v': %w", now, err)
 	}
 	return nil
 }

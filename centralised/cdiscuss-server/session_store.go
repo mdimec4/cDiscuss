@@ -1,7 +1,6 @@
 package main
 
 import (
-	"crypto/sha256"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -9,31 +8,36 @@ import (
 	"time"
 )
 
+type sessionDataContainer struct {
+	user        *user
+	expiresTime time.Time
+}
+
 type sessionStore struct {
 	alreadyUsedTokensMap *sync.Map
 
-	tokeExpiresAge             time.Duration
+	tokenExpiresAge            time.Duration
 	deleteOutdatedTokensPeriod time.Duration
 
 	stopWorkerChan             chan bool
 	deleteOutdatedTokensTicker *time.Ticker
 
-	databaseService databseServiceItf
+	databaseServiceSession databaseServiceSessionItf
 }
 
-func newSessionStore(databaseService databseServiceItf, tokeExpiresAge time.Duration, deleteOutdatedTokensPeriod time.Duration) (*sessionStore, error) {
+func newSessionStore(databaseServiceSession databaseServiceSessionItf, tokenExpiresAge time.Duration, deleteOutdatedTokensPeriod time.Duration) (*sessionStore, error) {
 	var session sessionStore
 
-	if tokeExpiresAge < 1 {
-		return nil, errors.New("bad tokeExpiresAge value")
+	if tokenExpiresAge < 1 {
+		return nil, errors.New("bad tokenExpiresAge value")
 	}
 	if deleteOutdatedTokensPeriod < 1 {
 		return nil, errors.New("bad deleteOutdatedTokensPeriod value")
 	}
 
 	session.alreadyUsedTokensMap = &sync.Map{}
-	session.databaseService = databaseService
-	session.tokeExpiresAge = tokeExpiresAge
+	session.databaseServiceSession = databaseServiceSession
+	session.tokenExpiresAge = tokenExpiresAge
 	session.deleteOutdatedTokensPeriod = deleteOutdatedTokensPeriod
 
 	session.stopWorkerChan = make(chan bool)
@@ -58,17 +62,17 @@ func (session *sessionStore) deleteOudatedTokensLoopWorker() {
 func (session *sessionStore) deleteOutdatedTokens() {
 	now := time.Now()
 
-	if session.databaseService != nil {
-		session.databaseService.deleteSeassionTokensThatExpired(now)
+	if session.databaseServiceSession != nil {
+		session.databaseServiceSession.deleteSessionsThatExpired(now)
 	}
 
 	session.alreadyUsedTokensMap.Range(func(key, value any) bool {
-		expiresTime, ok := value.(time.Time)
+		sessionData, ok := value.(sessionDataContainer)
 		if !ok {
-			slog.Error("Map token cleanup is not working, value is not time.Time")
+			slog.Error("Map token cleanup is not working, value is not sessionDataContainer")
 			return false
 		}
-		if isExpired(now, expiresTime) {
+		if isExpired(now, sessionData.expiresTime) {
 			session.alreadyUsedTokensMap.Delete(key)
 		}
 		return true
@@ -90,105 +94,113 @@ func (session *sessionStore) stop() {
 	})
 }
 
-func (session *sessionStore) storeToken(token string, now time.Time) error {
-	expiresTime := now.Add(session.tokeExpiresAge)
+func (session *sessionStore) storeSession(tokenHash string, user *user, now time.Time) error {
+	if tokenHash == "" {
+		return fmt.Errorf("tokenHash should not be empty string")
+	}
+	if user == nil {
+		return fmt.Errorf("user is nil")
+	}
 
-	session.alreadyUsedTokensMap.Store(token, expiresTime)
+	expiresTime := now.Add(session.tokenExpiresAge)
 
-	if session.databaseService != nil {
-		err := session.databaseService.createSeassionToken(token, expiresTime)
+	sessionData := sessionDataContainer{user: user, expiresTime: expiresTime}
+
+	session.alreadyUsedTokensMap.Store(tokenHash, sessionData)
+
+	if session.databaseServiceSession != nil {
+		err := session.databaseServiceSession.createSession(tokenHash, user.id, expiresTime)
 		return err
 	}
 	return nil
 }
 
-func (session *sessionStore) isTokenUsedAndForgetIfExpired(token string) (bool, error) {
+func (session *sessionStore) getUserOrForgetIfExpired(tokenHash string) (*user, error) {
 	var (
-		expiresTime   time.Time
+		sessionData   sessionDataContainer
 		foundInMemory bool = false
 		tokenFound    bool = false
 	)
+	if tokenHash == "" {
+		return nil, fmt.Errorf("Empty tokenHash")
+	}
 
-	expiresTimeAny, ok := session.alreadyUsedTokensMap.Load(token)
+	sessionDataAny, ok := session.alreadyUsedTokensMap.Load(tokenHash)
 	if ok {
-		expiresTime, ok = expiresTimeAny.(time.Time)
+		sessionData, ok = sessionDataAny.(sessionDataContainer)
 		if !ok {
-			return true, fmt.Errorf("Internal error: POW map value is not time.Time")
+			return nil, fmt.Errorf("Internal error: session map value is not sessionDataContainer")
 		}
 		tokenFound = true
 		foundInMemory = true
 	}
 
-	if !tokenFound && !foundInMemory && session.databaseService != nil {
-		expiresTimePtr, err := session.databaseService.getSeassionToken(token)
+	if !tokenFound && !foundInMemory && session.databaseServiceSession != nil {
+		expiresTimePtr, userPtr, err := session.databaseServiceSession.getSession(tokenHash)
 		if err != nil {
-			return true, err
+			return nil, err
 		}
-		expiresTime = *expiresTimePtr
+		sessionData = sessionDataContainer{user: userPtr, expiresTime: *expiresTimePtr}
 		tokenFound = true
 		foundInMemory = false
 	}
 
 	if !tokenFound {
-		return false, nil
+		return nil, nil
 	}
 
-	isTokenExpired := isExpired(time.Now(), expiresTime)
+	isTokenExpired := isExpired(time.Now(), sessionData.expiresTime)
 
 	if tokenFound && !foundInMemory && !isTokenExpired {
 		// cache non expired dbToken
-		session.alreadyUsedTokensMap.Store(token, expiresTime)
+		session.alreadyUsedTokensMap.Store(tokenHash, sessionData)
 	}
 
 	if tokenFound && isTokenExpired {
 		tokenFound = false
 
 		if foundInMemory {
-			session.alreadyUsedTokensMap.Delete(token)
+			session.alreadyUsedTokensMap.Delete(tokenHash)
 		}
-		if session.databaseService != nil {
-			session.databaseService.deleteSeassionToken(token)
+		if session.databaseServiceSession != nil {
+			session.databaseServiceSession.deleteSession(tokenHash)
 		}
 
 	}
 
-	return tokenFound, nil
+	return sessionData.user, nil
 }
 
-func (session *sessionStore) isTokenAceptableStore(token string, requiredHardnes uint, username string) (bool, error) {
-	isTokenUsed, err := session.isTokenUsedAndForgetIfExpired(token)
-	if err != nil {
-		return false, err
+func (session *sessionStore) newSession(user *user) (string, error) {
+	if user == nil {
+		return "", fmt.Errorf("user is nil")
 	}
-	if isTokenUsed {
-		return false, nil
-	}
-
-	parsedSeassionToken, err := parseSeassionToken(token)
-	if err != nil {
-		return false, err
-	}
-
-	if parsedSeassionToken.hardnes < requiredHardnes {
-		return false, errUserSessionIsNotValid
-	}
-
-	if parsedSeassionToken.username != username {
-		return false, errUserSessionIsNotValid
-	}
-
+	token := generateNewSessionToken()
 	now := time.Now()
-	timestampTimeDiff := parsedSeassionToken.dtCreatedReported.Sub(now).Abs()
-	if timestampTimeDiff >= session.tokeExpiresAge {
-		return false, errUserSessionIsNotValid
+
+	tokenHash, err := calculateTokenHash(token)
+	if err != nil {
+		return "", err
 	}
 
-	var sumSha256 [sha256.Size]byte = sha256.Sum256([]byte(token))
-	hashLeadingZeroBitCount := countSha256LeadingZeroBits(sumSha256)
-	if hashLeadingZeroBitCount < requiredHardnes {
-		return false, errUserSessionIsNotValid
+	session.storeSession(tokenHash, user, now)
+	return token, nil
+}
+
+func (session *sessionStore) getUser(token string) (*user, error) {
+	if token == "" {
+		return nil, fmt.Errorf("Empty token")
 	}
 
-	session.storeToken(token, now)
-	return true, nil
+	tokenHash, err := calculateTokenHash(token)
+	if err != nil {
+		return nil, err
+	}
+
+	user, err := session.getUserOrForgetIfExpired(tokenHash)
+	if err != nil {
+		return nil, err
+	}
+
+	return user, nil
 }

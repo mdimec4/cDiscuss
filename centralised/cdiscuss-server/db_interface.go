@@ -67,16 +67,16 @@ func getPasswordAndSaltSHA256Hash(password string, salt string) (string, error) 
 	return fmt.Sprintf("%x", sum), nil
 }
 
-type databseServiceProofOfWorkItf interface {
+type databaseServiceProofOfWorkItf interface {
 	getPowToken(token string) (*time.Time, error)
 	createPowToken(token string, dtExpires time.Time) error
 	deletePowToken(token string) error
 	deletePowTokensThatExpired(now time.Time) error
 }
 
-type databseServiceSessionItf interface {
-	getSessionToken(token string) (*time.Time, *user, error)
-	createSeassionToken(token string, idUser int64, dtExpires time.Time) error
-	deleteSeassionToken(token string) error
-	deleteSeassionTokensThatExpired(now time.Time) error
+type databaseServiceSessionItf interface {
+	getSession(tokenHash string) (*time.Time, *user, error)
+	createSession(tokenHash string, idUser int64, dtExpires time.Time) error
+	deleteSession(tokenHash string) error
+	deleteSessionsThatExpired(now time.Time) error
 }

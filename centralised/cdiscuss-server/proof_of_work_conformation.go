@@ -18,10 +18,10 @@ type proofOfWorkConformation struct {
 	stopWorkerChan             chan bool
 	deleteOutdatedTokensTicker *time.Ticker
 
-	databaseService databseServiceItf
+	databaseServicePow databaseServiceProofOfWorkItf
 }
 
-func newProofOfWorkConformation(databaseService databseServiceItf, tokeExpiresAge time.Duration, deleteOutdatedTokensPeriod time.Duration) (*proofOfWorkConformation, error) {
+func newProofOfWorkConformation(databaseServicePow databaseServiceProofOfWorkItf, tokeExpiresAge time.Duration, deleteOutdatedTokensPeriod time.Duration) (*proofOfWorkConformation, error) {
 	var powConform proofOfWorkConformation
 
 	if tokeExpiresAge < 1 {
@@ -32,7 +32,7 @@ func newProofOfWorkConformation(databaseService databseServiceItf, tokeExpiresAg
 	}
 
 	powConform.alreadyUsedTokensMap = &sync.Map{}
-	powConform.databaseService = databaseService
+	powConform.databaseServicePow = databaseServicePow
 	powConform.tokeExpiresAge = tokeExpiresAge
 	powConform.deleteOutdatedTokensPeriod = deleteOutdatedTokensPeriod
 
@@ -58,8 +58,8 @@ func (powConform *proofOfWorkConformation) deleteOudatedTokensLoopWorker() {
 func (powConform *proofOfWorkConformation) deleteOutdatedTokens() {
 	now := time.Now()
 
-	if powConform.databaseService != nil {
-		powConform.databaseService.deletePowTokensThatExpired(now)
+	if powConform.databaseServicePow != nil {
+		powConform.databaseServicePow.deletePowTokensThatExpired(now)
 	}
 
 	powConform.alreadyUsedTokensMap.Range(func(key, value any) bool {
@@ -95,8 +95,8 @@ func (powConform *proofOfWorkConformation) storeToken(token string, now time.Tim
 
 	powConform.alreadyUsedTokensMap.Store(token, expiresTime)
 
-	if powConform.databaseService != nil {
-		err := powConform.databaseService.createPowToken(token, expiresTime)
+	if powConform.databaseServicePow != nil {
+		err := powConform.databaseServicePow.createPowToken(token, expiresTime)
 		return err
 	}
 	return nil
@@ -119,8 +119,8 @@ func (powConform *proofOfWorkConformation) isTokenUsedAndForgetIfExpired(token s
 		foundInMemory = true
 	}
 
-	if !tokenFound && !foundInMemory && powConform.databaseService != nil {
-		expiresTimePtr, err := powConform.databaseService.getPowToken(token)
+	if !tokenFound && !foundInMemory && powConform.databaseServicePow != nil {
+		expiresTimePtr, err := powConform.databaseServicePow.getPowToken(token)
 		if err != nil {
 			return true, err
 		}
@@ -146,8 +146,8 @@ func (powConform *proofOfWorkConformation) isTokenUsedAndForgetIfExpired(token s
 		if foundInMemory {
 			powConform.alreadyUsedTokensMap.Delete(token)
 		}
-		if powConform.databaseService != nil {
-			powConform.databaseService.deletePowToken(token)
+		if powConform.databaseServicePow != nil {
+			powConform.databaseServicePow.deletePowToken(token)
 		}
 
 	}

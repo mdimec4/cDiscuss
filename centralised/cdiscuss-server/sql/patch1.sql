@@ -30,7 +30,7 @@ CREATE TABLE used_pow_tokens (
 );
 
 CREATE TABLE user_seassions (
-  seassion_token CHAR(21) PRIMARY KEY NOT NULL,
+  seassion_token_hash CHAR(64) PRIMARY KEY NOT NULL, -- sha256
   id_user BIGINT NOT NULL,
   dt_expires TIMESTAMP WITHOUT TIME ZONE NOT null,
 
@@ -39,3 +39,4 @@ CREATE TABLE user_seassions (
    REFERENCES users(id)
    ON DELETE CASCADE -- if account is deleted, than also drop all od deleted user seasions
 );
+

@@ -5,7 +5,7 @@ import "time"
 import "log/slog"
 import "crypto/sha256"
 
-var db databseServiceItf
+var db *postgresAdapter
 
 func main() {
 	db, err := newPostgresAdapter("postgresql://postgres:postgres@localhost:5432/cDiscuss?sslmode=disable")
