@@ -5,7 +5,7 @@ import "time"
 import "log/slog"
 import "crypto/sha256"
 
-var db *postgresAdapter
+var db databaseServiceItf
 
 func main() {
 	db, err := newPostgresAdapter("postgresql://postgres:postgres@localhost:5432/cDiscuss?sslmode=disable")
@@ -13,6 +13,7 @@ func main() {
 		slog.Error("connect", slog.Any("error", err))
 		return
 	}
+	//	time.Sleep(3000 * time.Second) // TODO REMOVE
 	user, err := db.createUser("miha", "ahim", false)
 	if err != nil {
 		slog.Error("create user", slog.Any("error", err))

@@ -5,7 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	_ "github.com/lib/pq"
+	"github.com/lib/pq"
 	"log/slog"
 	"time"
 )
@@ -13,7 +13,8 @@ import (
 // implements interfaces: databseServiceCommentItf, databseServiceUserItf,
 // databseServiceProofOfWorkItf and databseServiceSessionItf
 type postgresAdapter struct {
-	db *sql.DB
+	connString string
+	db         *sql.DB
 }
 
 func newPostgresAdapter(connStr string) (*postgresAdapter, error) {
@@ -25,7 +26,9 @@ func newPostgresAdapter(connStr string) (*postgresAdapter, error) {
 	if err != nil {
 		return nil, fmt.Errorf("Failed to ping postgres: %w", err)
 	}
-	postgresAdapter := &postgresAdapter{db: db}
+	postgresAdapter := &postgresAdapter{connString: connStr, db: db}
+
+	go postgresAdapter.deletedPowTokenListen()
 
 	return postgresAdapter, nil
 }
@@ -365,6 +368,7 @@ func (postgresAdapter postgresAdapter) getUser(id int64) (*user, error) {
 		return nil, fmt.Errorf("Failed to query a user id=%d: %w", id, err)
 	}
 	return user, nil
+
 }
 
 func (postgresAdapter postgresAdapter) getUserByUsername(username string) (*user, error) {
@@ -435,6 +439,37 @@ func (postgresAdapter postgresAdapter) deletePowTokensThatExpired(now time.Time)
 		return fmt.Errorf("Failed to delete pow tokens<='%v': %w", now, err)
 	}
 	return nil
+}
+
+func (postgresAdapter postgresAdapter) deletedPowTokenListen() {
+	// Listen for notifications
+	for {
+		err := postgresAdapter.db.Ping()
+		if err != nil {
+			slog.Error("deletedPowTokenListen: db ping fail", slog.Any("error", err))
+			return
+		}
+		reportProblem := func(ev pq.ListenerEventType, err error) {
+			if err != nil {
+				fmt.Println(err.Error())
+			}
+		}
+
+		minReconn := 10 * time.Second
+		maxReconn := time.Minute
+		listener := pq.NewListener(postgresAdapter.connString, minReconn, maxReconn, reportProblem)
+		err = listener.Listen("delete_row_used_pow_tokens")
+		if err != nil {
+			slog.Error("deletedPowTokenListen: listen fail", slog.Any("error", err))
+			return
+		}
+		for {
+			// process all available work before waiting for notifications
+			n := <-listener.Notify
+			fmt.Printf("%T/n", n)
+			fmt.Printf("%v/n", n)
+		}
+	}
 }
 
 func (postgresAdapter postgresAdapter) getSession(tokenHash string) (*time.Time, *user, error) {
