@@ -443,32 +443,29 @@ func (postgresAdapter postgresAdapter) deletePowTokensThatExpired(now time.Time)
 
 func (postgresAdapter postgresAdapter) deletedPowTokenListen() {
 	// Listen for notifications
-	for {
-		err := postgresAdapter.db.Ping()
+	reportProblem := func(ev pq.ListenerEventType, err error) {
 		if err != nil {
-			slog.Error("deletedPowTokenListen: db ping fail", slog.Any("error", err))
-			return
+			fmt.Println(err.Error())
 		}
-		reportProblem := func(ev pq.ListenerEventType, err error) {
-			if err != nil {
-				fmt.Println(err.Error())
-			}
+	}
+
+	minReconn := 10 * time.Second
+	maxReconn := time.Minute
+	listener := pq.NewListener(postgresAdapter.connString, minReconn, maxReconn, reportProblem)
+	err := listener.Listen("delete_row_used_pow_tokens")
+	if err != nil {
+		slog.Error("deletedPowTokenListen: listen fail", slog.Any("error", err))
+		return
+	}
+	for {
+		// process all available work before waiting for notifications
+		n := <-listener.Notify
+		if n == nil {
+			continue
 		}
 
-		minReconn := 10 * time.Second
-		maxReconn := time.Minute
-		listener := pq.NewListener(postgresAdapter.connString, minReconn, maxReconn, reportProblem)
-		err = listener.Listen("delete_row_used_pow_tokens")
-		if err != nil {
-			slog.Error("deletedPowTokenListen: listen fail", slog.Any("error", err))
-			return
-		}
-		for {
-			// process all available work before waiting for notifications
-			n := <-listener.Notify
-			fmt.Printf("%T/n", n)
-			fmt.Printf("%v/n", n)
-		}
+		fmt.Printf("%T\n", n)
+		fmt.Printf("%v\n", n)
 	}
 }
 
