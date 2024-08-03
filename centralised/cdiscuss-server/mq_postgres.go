@@ -62,7 +62,7 @@ func (mqPostgres *mqPostgres) sendMessage(operation string, argument string) err
 	if err != nil {
 		return fmt.Errorf("MQ postgres marshaling fail: %w", err)
 	}
-	_, err = mqPostgres.db.Exec("NOTIFY cDiscuss $1", string(msgJsonBytes))
+	_, err = mqPostgres.db.Exec("SELECT pg_notify('cDiscuss', $1)", string(msgJsonBytes))
 	if err != nil {
 		return fmt.Errorf("MQ postgres send fail: %w", err)
 	}
@@ -85,7 +85,7 @@ func (mqPostgres *mqPostgres) listen() {
 		}
 		var msg mqMessage
 		err := json.Unmarshal([]byte(n.Extra), &msg)
-		if err == nil {
+		if err != nil {
 			slog.Error("MqPostgres JSON unmarshal problem", slog.Any("error", err))
 			continue
 		}
