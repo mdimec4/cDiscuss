@@ -29,20 +29,6 @@ CREATE TABLE used_pow_tokens (
   dt_expires TIMESTAMP WITHOUT TIME ZONE NOT NULL
 );
 
-CREATE OR REPLACE FUNCTION trigger_delete_row_used_pow_tokens()
-RETURNS TRIGGER AS $$
-BEGIN
-    PERFORM pg_notify('delete_row_used_pow_tokens', old.pow_token);
-    RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
-CREATE TRIGGER delete_row_trigger_used_pow_tokens
-AFTER DELETE ON used_pow_tokens
-FOR EACH ROW
-EXECUTE PROCEDURE trigger_delete_row_used_pow_tokens();
-
-
 CREATE TABLE user_seassions (
   seassion_token_hash CHAR(64) PRIMARY KEY NOT NULL, -- sha256
   id_user BIGINT NOT NULL,

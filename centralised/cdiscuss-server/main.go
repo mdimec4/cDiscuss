@@ -5,15 +5,30 @@ import "time"
 import "log/slog"
 import "crypto/sha256"
 
+const instanceIDLen int = 21
+
+var instanceID string
 var db databaseServiceItf
+var mq mqServiceItf
 
 func main() {
-	db, err := newPostgresAdapter("postgresql://postgres:postgres@localhost:5432/cDiscuss?sslmode=disable")
+	var err error
+
+	instanceID = generateRandomStr(instanceIDLen)
+
+	dbConnString := "postgresql://postgres:postgres@localhost:5432/cDiscuss?sslmode=disable"
+	db, err = newPostgresAdapter(dbConnString)
 	if err != nil {
 		slog.Error("connect", slog.Any("error", err))
 		return
 	}
-	//	time.Sleep(3000 * time.Second) // TODO REMOVE
+	mq, err = newMqPostgres(dbConnString, instanceID)
+	mq.registerMessageCB(func(msg mqMessage) {
+		fmt.Printf("%v", msg)
+	})
+	time.Sleep(3 * time.Second) // TODO REMOVE
+	mq.sendMessage("Operacija", "niko arg")
+	time.Sleep(3000 * time.Second) // TODO REMOVE
 	user, err := db.createUser("miha", "ahim", false)
 	if err != nil {
 		slog.Error("create user", slog.Any("error", err))

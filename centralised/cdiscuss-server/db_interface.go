@@ -67,20 +67,11 @@ func getPasswordAndSaltSHA256Hash(password string, salt string) (string, error) 
 	return fmt.Sprintf("%x", sum), nil
 }
 
-type powTokenDeletedDbEventCbItf interface {
-	powTokenDeletedDbEventCb(token string)
-}
-
 type databaseServiceProofOfWorkItf interface {
 	getPowToken(token string) (*time.Time, error)
 	createPowToken(token string, dtExpires time.Time) error
 	deletePowToken(token string) error
 	deletePowTokensThatExpired(now time.Time) error
-	//registerPowTokenDeletedCb(deltedEventCbObj powTokenDeletedDbEventCb)
-}
-
-type sessionTokenDeletedDbEventCbItf interface {
-	sessionTokenDeletedDbEventCb(tokenHash string)
 }
 
 type databaseServiceSessionItf interface {
@@ -88,7 +79,6 @@ type databaseServiceSessionItf interface {
 	createSession(tokenHash string, idUser int64, dtExpires time.Time) error
 	deleteSession(tokenHash string) error
 	deleteSessionsThatExpired(now time.Time) error
-	//registerSessionDeletedCb(deltedEventCbObj sessionTokenDeletedDbEventCb)
 }
 
 type databaseServiceItf interface {
