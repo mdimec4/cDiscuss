@@ -70,7 +70,15 @@ func (mqPostgres *mqPostgres) sendMessage(operation string, argument string) err
 }
 
 func (mqPostgres *mqPostgres) closeMq() error {
-	return mqPostgres.listener.Close()
+	err1 := mqPostgres.db.Close()
+	err2 := mqPostgres.listener.Close()
+	if err2 != nil {
+		if err1 != nil {
+			slog.Error("Posgres MQ db closing error: ", slog.Any("error", err1))
+		}
+		return err2
+	}
+	return err1
 }
 
 func (mqPostgres *mqPostgres) listen() {
