@@ -27,7 +27,11 @@ func main() {
 		fmt.Printf("%v", msg)
 	})
 	time.Sleep(3 * time.Second) // TODO REMOVE
-	mq.sendMessage("Operacija", "niko arg")
+	err = mq.sendMessage("Operacija", "niko arg")
+	if err != nil {
+		slog.Error("send", slog.Any("error", err))
+		return
+	}
 	time.Sleep(3000 * time.Second) // TODO REMOVE
 	user, err := db.createUser("miha", "ahim", false)
 	if err != nil {
