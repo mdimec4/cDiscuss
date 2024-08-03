@@ -26,7 +26,6 @@ func main() {
 	mq.registerMessageCB(func(msg mqMessage) {
 		fmt.Printf("%v", msg)
 	})
-	time.Sleep(3 * time.Second) // TODO REMOVE
 	err = mq.sendMessage("Operacija", "niko arg")
 	if err != nil {
 		slog.Error("send", slog.Any("error", err))
