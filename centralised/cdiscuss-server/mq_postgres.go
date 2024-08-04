@@ -3,6 +3,7 @@ package main
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/lib/pq"
 	"log/slog"
@@ -10,17 +11,22 @@ import (
 )
 
 type mqPostgres struct {
-	callbacks  []mqMessageCB
+	callbacks  []mqPostgresCbContainer
 	listener   *pq.Listener
 	db         *sql.DB
 	instanceID string
+}
+
+type mqPostgresCbContainer struct {
+	cb          mqMessageCB
+	selfTrigger bool
 }
 
 func newMqPostgres(connectionString string, instanceID string) (*mqPostgres, error) {
 	if connectionString == "" || instanceID == "" {
 		return nil, fmt.Errorf("MQ postgres: Bad input parameters")
 	}
-	mqPostgres := &mqPostgres{instanceID: instanceID, callbacks: make([]mqMessageCB, 0, 1)}
+	mqPostgres := &mqPostgres{instanceID: instanceID, callbacks: make([]mqPostgresCbContainer, 0, 1)}
 
 	// Listen for notifications
 	reportProblem := func(ev pq.ListenerEventType, err error) {
@@ -52,8 +58,12 @@ func newMqPostgres(connectionString string, instanceID string) (*mqPostgres, err
 	return mqPostgres, nil
 }
 
-func (mqPostgres *mqPostgres) registerMessageCB(cb mqMessageCB) {
-	mqPostgres.callbacks = append(mqPostgres.callbacks, cb)
+func (mqPostgres *mqPostgres) registerMessageCB(cb mqMessageCB, selfTrigger bool) error {
+	if cb == nil {
+		return errors.New("Postgres MQ nil CB")
+	}
+	mqPostgres.callbacks = append(mqPostgres.callbacks, mqPostgresCbContainer{cb: cb, selfTrigger: selfTrigger})
+	return nil
 }
 
 func (mqPostgres *mqPostgres) sendMessage(operation string, argument string) error {
@@ -98,8 +108,10 @@ func (mqPostgres *mqPostgres) listen() {
 			continue
 		}
 
-		for _, cb := range mqPostgres.callbacks {
-			go cb(msg)
+		for _, cbContainer := range mqPostgres.callbacks {
+			if cbContainer.selfTrigger || mqPostgres.instanceID != msg.InstanceID {
+				go cbContainer.cb(msg)
+			}
 		}
 	}
 }

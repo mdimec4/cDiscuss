@@ -23,9 +23,17 @@ func main() {
 		return
 	}
 	mq, err = newMqPostgres(dbConnString, instanceID)
-	mq.registerMessageCB(func(msg mqMessage) {
+	if err != nil {
+		slog.Error("create", slog.Any("error", err))
+		return
+	}
+	err = mq.registerMessageCB(func(msg mqMessage) {
 		fmt.Printf("%v", msg)
-	})
+	}, true)
+	if err != nil {
+		slog.Error("register", slog.Any("error", err))
+		return
+	}
 	err = mq.sendMessage("Operacija", "niko arg")
 	if err != nil {
 		slog.Error("send", slog.Any("error", err))
