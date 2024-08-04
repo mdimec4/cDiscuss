@@ -28,4 +28,5 @@ func calculateTokenHash(token string) (string, error) {
 type sessionStoreItf interface {
 	newSession(user *user) (string, error)
 	getUser(token string) (*user, error)
+	logout(token string) error
 }

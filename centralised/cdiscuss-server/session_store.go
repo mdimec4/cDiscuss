@@ -14,7 +14,7 @@ type sessionDataContainer struct {
 }
 
 type sessionStore struct {
-	alreadyUsedTokensMap *sync.Map
+	sessionTokensMap *sync.Map
 
 	tokenExpiresAge            time.Duration
 	deleteOutdatedTokensPeriod time.Duration
@@ -23,9 +23,10 @@ type sessionStore struct {
 	deleteOutdatedTokensTicker *time.Ticker
 
 	databaseServiceSession databaseServiceSessionItf
+	mqService              mqServiceItf
 }
 
-func newSessionStore(databaseServiceSession databaseServiceSessionItf, tokenExpiresAge time.Duration, deleteOutdatedTokensPeriod time.Duration) (*sessionStore, error) {
+func newSessionStore(databaseServiceSession databaseServiceSessionItf, mqService mqServiceItf, tokenExpiresAge time.Duration, deleteOutdatedTokensPeriod time.Duration) (*sessionStore, error) {
 	var session sessionStore
 
 	if tokenExpiresAge < 1 {
@@ -35,8 +36,9 @@ func newSessionStore(databaseServiceSession databaseServiceSessionItf, tokenExpi
 		return nil, errors.New("bad deleteOutdatedTokensPeriod value")
 	}
 
-	session.alreadyUsedTokensMap = &sync.Map{}
+	session.sessionTokensMap = &sync.Map{}
 	session.databaseServiceSession = databaseServiceSession
+	session.mqService = mqService
 	session.tokenExpiresAge = tokenExpiresAge
 	session.deleteOutdatedTokensPeriod = deleteOutdatedTokensPeriod
 
@@ -44,6 +46,17 @@ func newSessionStore(databaseServiceSession databaseServiceSessionItf, tokenExpi
 	session.deleteOutdatedTokensTicker = time.NewTicker(deleteOutdatedTokensPeriod)
 
 	go session.deleteOudatedTokensLoopWorker()
+
+	if session.mqService != nil {
+		session.mqService.registerMessageCB(func(msg mqMessage) {
+			switch msg.Operation {
+			case mqSsessionEnd:
+				tokenHash := msg.Argument
+				session.sessionTokensMap.Delete(tokenHash)
+				break
+			}
+		}, false)
+	}
 
 	return &session, nil
 }
@@ -63,17 +76,20 @@ func (session *sessionStore) deleteOutdatedTokens() {
 	now := time.Now()
 
 	if session.databaseServiceSession != nil {
-		session.databaseServiceSession.deleteSessionsThatExpired(now)
+		err := session.databaseServiceSession.deleteSessionsThatExpired(now)
+		if err != nil {
+			slog.Error("Deleting outdated seassion from DB:", slog.Any("error", err))
+		}
 	}
 
-	session.alreadyUsedTokensMap.Range(func(key, value any) bool {
+	session.sessionTokensMap.Range(func(key, value any) bool {
 		sessionData, ok := value.(sessionDataContainer)
 		if !ok {
 			slog.Error("Map token cleanup is not working, value is not sessionDataContainer")
 			return false
 		}
 		if isExpired(now, sessionData.expiresTime) {
-			session.alreadyUsedTokensMap.Delete(key)
+			session.sessionTokensMap.Delete(key)
 		}
 		return true
 	})
@@ -88,8 +104,8 @@ func (session *sessionStore) stop() {
 		slog.Error("can't stop sessionStore instance")
 	}
 
-	session.alreadyUsedTokensMap.Range(func(key, value any) bool {
-		session.alreadyUsedTokensMap.Delete(key)
+	session.sessionTokensMap.Range(func(key, value any) bool {
+		session.sessionTokensMap.Delete(key)
 		return true
 	})
 }
@@ -106,7 +122,7 @@ func (session *sessionStore) storeSession(tokenHash string, user *user, now time
 
 	sessionData := sessionDataContainer{user: user, expiresTime: expiresTime}
 
-	session.alreadyUsedTokensMap.Store(tokenHash, sessionData)
+	session.sessionTokensMap.Store(tokenHash, sessionData)
 
 	if session.databaseServiceSession != nil {
 		err := session.databaseServiceSession.createSession(tokenHash, user.id, expiresTime)
@@ -125,7 +141,7 @@ func (session *sessionStore) getUserOrForgetIfExpired(tokenHash string) (*user, 
 		return nil, fmt.Errorf("Empty tokenHash")
 	}
 
-	sessionDataAny, ok := session.alreadyUsedTokensMap.Load(tokenHash)
+	sessionDataAny, ok := session.sessionTokensMap.Load(tokenHash)
 	if ok {
 		sessionData, ok = sessionDataAny.(sessionDataContainer)
 		if !ok {
@@ -153,17 +169,20 @@ func (session *sessionStore) getUserOrForgetIfExpired(tokenHash string) (*user, 
 
 	if tokenFound && !foundInMemory && !isTokenExpired {
 		// cache non expired dbToken
-		session.alreadyUsedTokensMap.Store(tokenHash, sessionData)
+		session.sessionTokensMap.Store(tokenHash, sessionData)
 	}
 
 	if tokenFound && isTokenExpired {
 		tokenFound = false
 
 		if foundInMemory {
-			session.alreadyUsedTokensMap.Delete(tokenHash)
+			session.sessionTokensMap.Delete(tokenHash)
 		}
 		if session.databaseServiceSession != nil {
-			session.databaseServiceSession.deleteSession(tokenHash)
+			err := session.databaseServiceSession.deleteSession(tokenHash)
+			if err != nil {
+				slog.Error("Deleting outdated seassion from DB:", slog.Any("error", err))
+			}
 		}
 
 	}
@@ -203,4 +222,27 @@ func (session *sessionStore) getUser(token string) (*user, error) {
 	}
 
 	return user, nil
+}
+
+func (session *sessionStore) logout(token string) error {
+	tokenHash, err := calculateTokenHash(token)
+	if err != nil {
+		return err
+	}
+
+	if session.databaseServiceSession != nil {
+		err := session.databaseServiceSession.deleteSession(tokenHash)
+		if err != nil {
+			return fmt.Errorf("Logout faild because of database: %w", err)
+		}
+	}
+	session.sessionTokensMap.Delete(tokenHash)
+
+	if session.mqService != nil {
+		err = session.mqService.sendMessage(mqSsessionEnd, tokenHash)
+		if err != nil {
+			slog.Error("sessio store: informing logout to other instancs failed", slog.Any("error", err))
+		}
+	}
+	return nil
 }
