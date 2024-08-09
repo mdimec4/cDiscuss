@@ -11,6 +11,14 @@ var instanceID string
 var db databaseServiceItf
 var mq mqServiceItf
 
+type cbObj struct {
+}
+
+// implement mqMessageCbItf
+func (obj *cbObj) onMessage(msg mqMessage) {
+	fmt.Printf("%v", msg)
+}
+
 func main() {
 	var err error
 
@@ -28,11 +36,7 @@ func main() {
 		return
 	}
 
-	var cb mqMessageCB = func(msg mqMessage) {
-		fmt.Printf("%v", msg)
-	}
-
-	err = mq.registerMessageCB("Operacija", &cb, true)
+	err = mq.registerMessageCB("Operacija", &cbObj{}, true)
 	if err != nil {
 		slog.Error("register", slog.Any("error", err))
 		return

@@ -10,11 +10,13 @@ type mqMessage struct {
 	Argument   string `json: argument`
 }
 
-type mqMessageCB func(msg mqMessage)
+type mqMessageCbItf interface {
+	onMessage(msg mqMessage)
+}
 
 type mqServiceItf interface {
-	registerMessageCB(operation string, cb *mqMessageCB, selfTrigger bool) error
-	unregisterMessageCB(operartion string, cb *mqMessageCB) error
+	registerMessageCB(operation string, cbObj mqMessageCbItf, selfTrigger bool) error
+	unregisterMessageCB(operartion string, cbObj mqMessageCbItf) error
 	sendMessage(operation string, argument string) error
 	closeMq() error
 }

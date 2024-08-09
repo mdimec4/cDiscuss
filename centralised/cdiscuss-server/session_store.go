@@ -24,7 +24,6 @@ type sessionStore struct {
 
 	databaseServiceSession databaseServiceSessionItf
 	mqService              mqServiceItf
-	mqServiceSessionEndCB  *mqMessageCB
 }
 
 func newSessionStore(databaseServiceSession databaseServiceSessionItf, mqService mqServiceItf, tokenExpiresAge time.Duration, deleteOutdatedTokensPeriod time.Duration) (*sessionStore, error) {
@@ -49,16 +48,20 @@ func newSessionStore(databaseServiceSession databaseServiceSessionItf, mqService
 	go session.deleteOudatedTokensLoopWorker()
 
 	if session.mqService != nil {
-		var cb mqMessageCB = func(msg mqMessage) {
-			tokenHash := msg.Argument
-			session.sessionTokensMap.Delete(tokenHash)
-		}
-
-		session.mqServiceSessionEndCB = &cb
-		session.mqService.registerMessageCB(mqSessionEnd, &cb, false)
+		session.mqService.registerMessageCB(mqSessionEnd, &session, false)
 	}
 
 	return &session, nil
+}
+
+// implement MQ mqMessageCbItf
+func (session *sessionStore) onMessage(msg mqMessage) {
+	switch msg.Operation {
+	case mqSessionEnd:
+		tokenHash := msg.Argument
+		session.sessionTokensMap.Delete(tokenHash)
+		break
+	}
 }
 
 func (session *sessionStore) deleteOudatedTokensLoopWorker() {
@@ -108,8 +111,8 @@ func (session *sessionStore) stop() {
 		session.sessionTokensMap.Delete(key)
 		return true
 	})
-	if session.mqService != nil && session.mqServiceSessionEndCB != nil {
-		if err := session.mqService.unregisterMessageCB(mqSessionEnd, session.mqServiceSessionEndCB); err != nil {
+	if session.mqService != nil {
+		if err := session.mqService.unregisterMessageCB(mqSessionEnd, session); err != nil {
 			slog.Error("sessionStore unregisterinf MQ CB error:", slog.Any("error", err))
 		}
 	}
