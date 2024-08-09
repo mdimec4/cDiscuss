@@ -13,8 +13,8 @@ type mqMessage struct {
 type mqMessageCB func(msg mqMessage)
 
 type mqServiceItf interface {
-	registerMessageCB(operation string, cb mqMessageCB, selfTrigger bool) error
-	unregisterMessageCB(operartion string, cb mqMessageCB) error
+	registerMessageCB(operation string, cb *mqMessageCB, selfTrigger bool) error
+	unregisterMessageCB(operartion string, cb *mqMessageCB) error
 	sendMessage(operation string, argument string) error
 	closeMq() error
 }

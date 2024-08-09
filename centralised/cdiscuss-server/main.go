@@ -27,9 +27,12 @@ func main() {
 		slog.Error("create", slog.Any("error", err))
 		return
 	}
-	err = mq.registerMessageCB("Operacija", func(msg mqMessage) {
+
+	var cb mqMessageCB = func(msg mqMessage) {
 		fmt.Printf("%v", msg)
-	}, true)
+	}
+
+	err = mq.registerMessageCB("Operacija", &cb, true)
 	if err != nil {
 		slog.Error("register", slog.Any("error", err))
 		return

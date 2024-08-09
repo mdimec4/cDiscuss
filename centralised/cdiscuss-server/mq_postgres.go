@@ -56,7 +56,7 @@ func newMqPostgres(connectionString string, instanceID string) (*mqPostgres, err
 	return mqPostgres, nil
 }
 
-func (mqPostgres *mqPostgres) registerMessageCB(operation string, cb mqMessageCB, selfTrigger bool) error {
+func (mqPostgres *mqPostgres) registerMessageCB(operation string, cb *mqMessageCB, selfTrigger bool) error {
 	if cb == nil {
 		return errors.New("Postgres MQ nil CB")
 	}
@@ -71,14 +71,14 @@ func (mqPostgres *mqPostgres) registerMessageCB(operation string, cb mqMessageCB
 		callbacksSet = make(map[*mqMessageCB]bool)
 		mqPostgres.callbacksMap[operation] = callbacksSet
 	}
-	callbacksSet[&cb] = selfTrigger
+	callbacksSet[cb] = selfTrigger
 
 	mqPostgres.callbackMapMutex.Unlock()
 
 	return nil
 }
 
-func (mqPostgres *mqPostgres) unregisterMessageCB(operation string, cb mqMessageCB) error {
+func (mqPostgres *mqPostgres) unregisterMessageCB(operation string, cb *mqMessageCB) error {
 	if cb == nil {
 		return errors.New("Postgres MQ nil CB")
 	}
@@ -93,7 +93,7 @@ func (mqPostgres *mqPostgres) unregisterMessageCB(operation string, cb mqMessage
 	if !ok {
 		return nil
 	}
-	delete(callbacksSet, &cb)
+	delete(callbacksSet, cb)
 	if len(callbacksSet) == 0 {
 		delete(mqPostgres.callbacksMap, operation)
 	}

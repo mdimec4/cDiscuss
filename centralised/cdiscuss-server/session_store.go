@@ -24,7 +24,7 @@ type sessionStore struct {
 
 	databaseServiceSession databaseServiceSessionItf
 	mqService              mqServiceItf
-	mqServiceSessionEndCB  mqMessageCB
+	mqServiceSessionEndCB  *mqMessageCB
 }
 
 func newSessionStore(databaseServiceSession databaseServiceSessionItf, mqService mqServiceItf, tokenExpiresAge time.Duration, deleteOutdatedTokensPeriod time.Duration) (*sessionStore, error) {
@@ -49,14 +49,13 @@ func newSessionStore(databaseServiceSession databaseServiceSessionItf, mqService
 	go session.deleteOudatedTokensLoopWorker()
 
 	if session.mqService != nil {
-		cb := func(msg mqMessage) {
+		var cb mqMessageCB = func(msg mqMessage) {
 			tokenHash := msg.Argument
 			session.sessionTokensMap.Delete(tokenHash)
 		}
-		_ = &cb == &cb
 
-		session.mqServiceSessionEndCB = cb
-		session.mqService.registerMessageCB(mqSessionEnd, cb, false)
+		session.mqServiceSessionEndCB = &cb
+		session.mqService.registerMessageCB(mqSessionEnd, &cb, false)
 	}
 
 	return &session, nil
