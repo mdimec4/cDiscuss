@@ -24,6 +24,7 @@ type sessionStore struct {
 
 	databaseServiceSession databaseServiceSessionItf
 	mqService              mqServiceItf
+	mqServiceSessionEndCB  mqMessageCB
 }
 
 func newSessionStore(databaseServiceSession databaseServiceSessionItf, mqService mqServiceItf, tokenExpiresAge time.Duration, deleteOutdatedTokensPeriod time.Duration) (*sessionStore, error) {
@@ -48,14 +49,14 @@ func newSessionStore(databaseServiceSession databaseServiceSessionItf, mqService
 	go session.deleteOudatedTokensLoopWorker()
 
 	if session.mqService != nil {
-		session.mqService.registerMessageCB(func(msg mqMessage) {
-			switch msg.Operation {
-			case mqSsessionEnd:
-				tokenHash := msg.Argument
-				session.sessionTokensMap.Delete(tokenHash)
-				break
-			}
-		}, false)
+		cb := func(msg mqMessage) {
+			tokenHash := msg.Argument
+			session.sessionTokensMap.Delete(tokenHash)
+		}
+		_ = &cb == &cb
+
+		session.mqServiceSessionEndCB = cb
+		session.mqService.registerMessageCB(mqSessionEnd, cb, false)
 	}
 
 	return &session, nil
@@ -108,6 +109,11 @@ func (session *sessionStore) stop() {
 		session.sessionTokensMap.Delete(key)
 		return true
 	})
+	if session.mqService != nil && session.mqServiceSessionEndCB != nil {
+		if err := session.mqService.unregisterMessageCB(mqSessionEnd, session.mqServiceSessionEndCB); err != nil {
+			slog.Error("sessionStore unregisterinf MQ CB error:", slog.Any("error", err))
+		}
+	}
 }
 
 func (session *sessionStore) storeSession(tokenHash string, user *user, now time.Time) error {
@@ -239,7 +245,7 @@ func (session *sessionStore) logout(token string) error {
 	session.sessionTokensMap.Delete(tokenHash)
 
 	if session.mqService != nil {
-		err = session.mqService.sendMessage(mqSsessionEnd, tokenHash)
+		err = session.mqService.sendMessage(mqSessionEnd, tokenHash)
 		if err != nil {
 			slog.Error("sessio store: informing logout to other instancs failed", slog.Any("error", err))
 		}

@@ -1,7 +1,7 @@
 package main
 
 const (
-	mqSsessionEnd = "session end"
+	mqSessionEnd = "session end"
 )
 
 type mqMessage struct {
@@ -13,7 +13,8 @@ type mqMessage struct {
 type mqMessageCB func(msg mqMessage)
 
 type mqServiceItf interface {
-	registerMessageCB(cb mqMessageCB, selfTrigger bool) error
+	registerMessageCB(operation string, cb mqMessageCB, selfTrigger bool) error
+	unregisterMessageCB(operartion string, cb mqMessageCB) error
 	sendMessage(operation string, argument string) error
 	closeMq() error
 }

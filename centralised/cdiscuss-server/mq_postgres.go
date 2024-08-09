@@ -7,26 +7,24 @@ import (
 	"fmt"
 	"github.com/lib/pq"
 	"log/slog"
+	"sync"
 	"time"
 )
 
 type mqPostgres struct {
-	callbacks  []mqPostgresCbContainer
+	callbackMapMutex *sync.RWMutex
+	callbacksMap     map[string]map[*mqMessageCB]bool
+
 	listener   *pq.Listener
 	db         *sql.DB
 	instanceID string
-}
-
-type mqPostgresCbContainer struct {
-	cb          mqMessageCB
-	selfTrigger bool
 }
 
 func newMqPostgres(connectionString string, instanceID string) (*mqPostgres, error) {
 	if connectionString == "" || instanceID == "" {
 		return nil, fmt.Errorf("MQ postgres: Bad input parameters")
 	}
-	mqPostgres := &mqPostgres{instanceID: instanceID, callbacks: make([]mqPostgresCbContainer, 0, 1)}
+	mqPostgres := &mqPostgres{callbackMapMutex: &sync.RWMutex{}, callbacksMap: make(map[string]map[*mqMessageCB]bool), instanceID: instanceID}
 
 	// Listen for notifications
 	reportProblem := func(ev pq.ListenerEventType, err error) {
@@ -58,11 +56,48 @@ func newMqPostgres(connectionString string, instanceID string) (*mqPostgres, err
 	return mqPostgres, nil
 }
 
-func (mqPostgres *mqPostgres) registerMessageCB(cb mqMessageCB, selfTrigger bool) error {
+func (mqPostgres *mqPostgres) registerMessageCB(operation string, cb mqMessageCB, selfTrigger bool) error {
 	if cb == nil {
 		return errors.New("Postgres MQ nil CB")
 	}
-	mqPostgres.callbacks = append(mqPostgres.callbacks, mqPostgresCbContainer{cb: cb, selfTrigger: selfTrigger})
+	if operation == "" {
+		return errors.New("Postgres MQ: can't register empty operation string")
+	}
+
+	mqPostgres.callbackMapMutex.Lock()
+
+	callbacksSet, ok := mqPostgres.callbacksMap[operation]
+	if !ok {
+		callbacksSet = make(map[*mqMessageCB]bool)
+		mqPostgres.callbacksMap[operation] = callbacksSet
+	}
+	callbacksSet[&cb] = selfTrigger
+
+	mqPostgres.callbackMapMutex.Unlock()
+
+	return nil
+}
+
+func (mqPostgres *mqPostgres) unregisterMessageCB(operation string, cb mqMessageCB) error {
+	if cb == nil {
+		return errors.New("Postgres MQ nil CB")
+	}
+	if operation == "" {
+		return errors.New("Postgres MQ: can't unregister empty operation string")
+	}
+
+	mqPostgres.callbackMapMutex.Lock()
+	defer mqPostgres.callbackMapMutex.Unlock()
+
+	callbacksSet, ok := mqPostgres.callbacksMap[operation]
+	if !ok {
+		return nil
+	}
+	delete(callbacksSet, &cb)
+	if len(callbacksSet) == 0 {
+		delete(mqPostgres.callbacksMap, operation)
+	}
+
 	return nil
 }
 
@@ -108,10 +143,21 @@ func (mqPostgres *mqPostgres) listen() {
 			continue
 		}
 
-		for _, cbContainer := range mqPostgres.callbacks {
-			if cbContainer.selfTrigger || mqPostgres.instanceID != msg.InstanceID {
-				go cbContainer.cb(msg)
+		mqPostgres.callbackMapMutex.RLock()
+
+		callbacksSet, ok := mqPostgres.callbacksMap[msg.Operation]
+		if !ok {
+			mqPostgres.callbackMapMutex.RUnlock()
+			continue
+		}
+
+		for cbPtr, selfTrigger := range callbacksSet {
+			if selfTrigger || mqPostgres.instanceID != msg.InstanceID {
+				cb := *cbPtr
+				go cb(msg)
 			}
 		}
+		mqPostgres.callbackMapMutex.RUnlock()
+
 	}
 }
