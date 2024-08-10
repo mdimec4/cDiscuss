@@ -118,15 +118,13 @@ func (session *sessionStore) stop() {
 	}
 }
 
-func (session *sessionStore) storeSession(tokenHash string, user *user, now time.Time) error {
+func (session *sessionStore) storeSession(tokenHash string, user *user, expiresTime time.Time) error {
 	if tokenHash == "" {
 		return fmt.Errorf("tokenHash should not be empty string")
 	}
 	if user == nil {
 		return fmt.Errorf("user is nil")
 	}
-
-	expiresTime := now.Add(session.tokenExpiresAge)
 
 	sessionData := sessionDataContainer{user: user, expiresTime: expiresTime}
 
@@ -198,20 +196,25 @@ func (session *sessionStore) getUserOrForgetIfExpired(tokenHash string) (*user, 
 	return sessionData.user, nil
 }
 
-func (session *sessionStore) newSession(user *user) (string, error) {
+func (session *sessionStore) newSession(user *user) (string, time.Time, error) {
 	if user == nil {
-		return "", fmt.Errorf("user is nil")
+		return "", time.Time{}, fmt.Errorf("user is nil")
 	}
 	token := generateNewSessionToken()
-	now := time.Now()
 
 	tokenHash, err := calculateTokenHash(token)
 	if err != nil {
-		return "", err
+		return "", time.Time{}, err
 	}
 
-	session.storeSession(tokenHash, user, now)
-	return token, nil
+	now := time.Now()
+	expiresTime := now.Add(session.tokenExpiresAge)
+
+	err = session.storeSession(tokenHash, user, expiresTime)
+	if err != nil {
+		return "", time.Time{}, err
+	}
+	return token, expiresTime, nil
 }
 
 func (session *sessionStore) getUser(token string) (*user, error) {

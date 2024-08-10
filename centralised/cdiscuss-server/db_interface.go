@@ -28,7 +28,7 @@ type commentJoinedWithUser struct {
 	CommentBody string    `json: commentBody`
 }
 
-type databseServiceCommentItf interface {
+type databaseServiceCommentItf interface {
 	listPageComments(urlHash string, offset uint64, count uint64) (*pageComments, error)
 	getComment(id int64) (*comment, error)
 	createComment(urlHash string, idUser int64, dtCreated time.Time, commentBody string) (int64, error)
@@ -41,7 +41,7 @@ type user struct {
 	adminRole bool
 }
 
-type databseServiceUserItf interface {
+type databaseServiceUserItf interface {
 	createUser(username string, password string, adminRole bool) (*user, error)
 	modifyUserPassword(id int64, oldPassword string, newPassword string) error
 	modifyUserAdminRole(id int64, adminRole bool) error
@@ -82,8 +82,8 @@ type databaseServiceSessionItf interface {
 }
 
 type databaseServiceItf interface {
-	databseServiceCommentItf
-	databseServiceUserItf
+	databaseServiceCommentItf
+	databaseServiceUserItf
 	databaseServiceProofOfWorkItf
 	databaseServiceSessionItf
 }

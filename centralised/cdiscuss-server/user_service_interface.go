@@ -12,10 +12,12 @@ const (
 	proofOfWorkCreateUserRequiredHardnes int           = 19
 	seassionExpiresAge                   time.Duration = time.Hour * 24 * 30 * 6 // rughly six months
 	seassionCleanUpPeriod                time.Duration = time.Hour
+	sessionCookieName                    string        = "CDSESSION"
 )
 
 type userServiceItf interface {
-	getSessionUser(sessionCookie *http.Cookie) *user
+	login(username string, passwoed string) (*http.Cookie, *user, error)
+	getSessionUser(sessionCookie *http.Cookie) (*user, error)
 
 	getCreateUserProofOfWorkRequredHardnes() uint
 

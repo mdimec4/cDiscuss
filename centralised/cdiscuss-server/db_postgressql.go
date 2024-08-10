@@ -10,8 +10,8 @@ import (
 	"time"
 )
 
-// implements interfaces: databseServiceCommentItf, databseServiceUserItf,
-// databseServiceProofOfWorkItf, databseServiceSessionItf and finaly databaseServiceItf
+// implements interfaces: databaseServiceCommentItf, databaseServiceUserItf,
+// databaseServiceProofOfWorkItf, databaseServiceSessionItf and finaly databaseServiceItf
 type postgresAdapter struct {
 	connString string
 	db         *sql.DB
