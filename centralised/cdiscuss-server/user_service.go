@@ -14,6 +14,15 @@ func newUserService(sessionStore sessionStoreItf, databaseServiceUser databaseSe
 }
 
 func (userService *userService) login(username string, password string) (*http.Cookie, *user, error) {
+	err := validateUsername(username)
+	if err != nil {
+		return nil, nil, err
+	}
+	err = validatePassword(password)
+	if err != nil {
+		return nil, nil, err
+	}
+
 	user, err := userService.databaseServiceUser.authenticateUser(username, password)
 	if err != nil {
 		return nil, nil, err

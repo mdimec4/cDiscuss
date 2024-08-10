@@ -17,11 +17,11 @@ var (
 	errCommentDoesntExist     = newValidationError("Comment doesn't exist.", http.StatusNotFound)
 	errUserWrongPassword      = newValidationError("Wrong user password.", http.StatusUnauthorized)
 	errUrlHashLen             = newValidationError("Wrong URL hash length.", http.StatusBadRequest)
-	errUsernameToShort        = newValidationError("Username is too short.", http.StatusBadRequest)
-	errUsernameToLong         = newValidationError("Username is too long.", http.StatusBadRequest)
-	errUsernameUnAllowedChars = newValidationError("Username contains un allowed chars.", http.StatusBadRequest)
-	errPasswordToShort        = newValidationError("Password is too short.", http.StatusBadRequest)
-	errPasswordToLong         = newValidationError("Password is too long.", http.StatusBadRequest)
+	errUsernameTooShort       = newValidationError("Username is too short.", http.StatusBadRequest)
+	errUsernameTooLong        = newValidationError("Username is too long.", http.StatusBadRequest)
+	errUsernameUnallowedChars = newValidationError("Username contains unallowed chars.", http.StatusBadRequest)
+	errPasswordTooShort       = newValidationError("Password is too short.", http.StatusBadRequest)
+	errPasswordTooLong        = newValidationError("Password is too long.", http.StatusBadRequest)
 
 	errInvalidPowToken = newValidationError("Invalid POW token.", http.StatusUnauthorized)
 

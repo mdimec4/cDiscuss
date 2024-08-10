@@ -176,7 +176,7 @@ func (postgresAdapter postgresAdapter) createUser(username string, password stri
 		return nil, fmt.Errorf("Error creating user: empty username")
 	}
 	if len(username) > usernameMaxLen {
-		return nil, errUsernameToLong
+		return nil, errUsernameTooLong
 	}
 	if password == "" {
 		return nil, fmt.Errorf("Error creating user: empty password")
@@ -229,7 +229,7 @@ func (postgresAdapter postgresAdapter) createUser(username string, password stri
 
 func getUserId(tx *sql.Tx, username string) (int64, error) {
 	if len(username) > usernameMaxLen {
-		return -1, errUsernameToLong
+		return -1, errUsernameTooLong
 	}
 
 	const getQuery = "SELECT id FROM users WHERE username=$1 LIMIT 1"
@@ -325,7 +325,7 @@ func (postgresAdapter postgresAdapter) modifyUserAdminRole(id int64, adminRole b
 
 func (postgresAdapter postgresAdapter) authenticateUser(username string, password string) (*user, error) {
 	if len(username) > usernameMaxLen {
-		return nil, errUsernameToLong
+		return nil, errUsernameTooLong
 	}
 
 	const query = "SELECT id, username, salt, pw_hash, admin_role FROM users WHERE username=$1 LIMIT 1"
@@ -371,7 +371,7 @@ func (postgresAdapter postgresAdapter) getUser(id int64) (*user, error) {
 
 func (postgresAdapter postgresAdapter) getUserByUsername(username string) (*user, error) {
 	if len(username) > usernameMaxLen {
-		return nil, errUsernameToLong
+		return nil, errUsernameTooLong
 	}
 
 	const query = "SELECT id, username, admin_role FROM users WHERE username=$1 LIMIT 1"

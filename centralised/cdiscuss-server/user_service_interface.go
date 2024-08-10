@@ -1,7 +1,10 @@
 package main
 
-import "time"
-import "net/http"
+import (
+	"net/http"
+	"regexp"
+	"time"
+)
 
 const (
 	saltLen                              int           = 21
@@ -22,7 +25,7 @@ type userServiceItf interface {
 	getCreateUserProofOfWorkRequredHardnes() uint
 
 	// creates new user in db and creates session
-	// TODO validate username ^[A-Za-z0-9]{1,50}$ because ':' char is not allowed (POW token)
+	// TODO validate username ^[A-Za-z0-9]{4,50}$ because ':' char is not allowed (POW token)
 	createUser(powString string, username string, password string) (*http.Cookie, error)
 
 	modifyPassword(oldPassword string, newPassword string) error
@@ -36,4 +39,33 @@ type adminUserServiceItf interface {
 	deleteUser(idUser int64) error // also destroys existing sessions
 	modifyUserPassword(id int64, oldPassword string, newPassword string) error
 	modifyUserAdminRole(id int64, adminRole bool) error // also modifies existing sessions
+}
+
+var usernameRegex = regexp.MustCompile(`(?m)^[a-zA-Z0-9]*$`) // because of Proof Of Work token format username must not contain ':' char.
+
+func validateUsername(username string) error {
+	if len(username) < usernameMinLen {
+		return errUsernameTooShort
+	}
+	if len(username) > usernameMaxLen {
+		return errUsernameTooLong
+	}
+
+	match := usernameRegex.Match([]byte(username))
+	if !match {
+		return errUsernameUnallowedChars
+	}
+
+	return nil
+}
+
+func validatePassword(password string) error {
+	if len(password) < passwordMinLen {
+		return errPasswordTooShort
+	}
+	if len(password) > passwordMaxLen {
+		return errPasswordTooLong
+	}
+
+	return nil
 }
