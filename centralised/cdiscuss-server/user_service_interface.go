@@ -12,16 +12,18 @@ const (
 	usernameMaxLen                       int           = 50
 	passwordMinLen                       int           = 21
 	passwordMaxLen                       int           = 100
-	proofOfWorkCreateUserRequiredHardnes int           = 19
+	proofOfWorkLoginRequiredHardnes      uint          = 10
+	proofOfWorkCreateUserRequiredHardnes uint          = 19
 	seassionExpiresAge                   time.Duration = time.Hour * 24 * 30 * 6 // rughly six months
 	seassionCleanUpPeriod                time.Duration = time.Hour
 	sessionCookieName                    string        = "CDSESSION"
 )
 
 type userServiceItf interface {
-	login(username string, passwoed string) (*http.Cookie, *user, error)
+	login(powString string, username string, passwoed string) (*http.Cookie, *user, error)
 	getSessionUser(sessionCookie *http.Cookie) (*user, error)
 
+	getLoginProofOfWorkRequredHardnes() uint
 	getCreateUserProofOfWorkRequredHardnes() uint
 
 	// creates new user in db and creates session

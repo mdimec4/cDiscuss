@@ -155,40 +155,40 @@ func (powConform *proofOfWorkConformation) isTokenUsedAndForgetIfExpired(token s
 	return tokenFound, nil
 }
 
-func (powConform *proofOfWorkConformation) isTokenAceptableStore(token string, requiredHardnes uint, username string) (bool, error) {
+func (powConform *proofOfWorkConformation) isTokenAceptableStore(token string, requiredHardnes uint, username string) error {
 	isTokenUsed, err := powConform.isTokenUsedAndForgetIfExpired(token)
 	if err != nil {
-		return false, err
+		return err
 	}
 	if isTokenUsed {
-		return false, nil
+		return errUsedPowToken
 	}
 
 	parsedPowToken, err := parsePowToken(token)
 	if err != nil {
-		return false, err
+		return err
 	}
 
 	if parsedPowToken.hardnes < requiredHardnes {
-		return false, errInvalidPowToken
+		return errInvalidPowToken
 	}
 
 	if parsedPowToken.username != username {
-		return false, errInvalidPowToken
+		return errInvalidPowToken
 	}
 
 	now := time.Now()
 	timestampTimeDiff := parsedPowToken.dtCreatedReported.Sub(now).Abs()
 	if timestampTimeDiff >= powConform.tokeExpiresAge {
-		return false, errInvalidPowToken
+		return errInvalidPowToken
 	}
 
 	var sumSha256 [sha256.Size]byte = sha256.Sum256([]byte(token))
 	hashLeadingZeroBitCount := countSha256LeadingZeroBits(sumSha256)
 	if hashLeadingZeroBitCount < requiredHardnes {
-		return false, errInvalidPowToken
+		return errInvalidPowToken
 	}
 
 	powConform.storeToken(token, now)
-	return true, nil
+	return nil
 }

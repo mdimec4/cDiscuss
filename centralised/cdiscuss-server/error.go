@@ -24,6 +24,7 @@ var (
 	errPasswordTooLong        = newValidationError("Password is too long.", http.StatusBadRequest)
 
 	errInvalidPowToken = newValidationError("Invalid POW token.", http.StatusUnauthorized)
+	errUsedPowToken    = newValidationError("Already used POW token.", http.StatusUnauthorized)
 
 	errUserSessionIsNotValid = newValidationError("User session is not valid or doesn't exist", http.StatusUnauthorized)
 )

@@ -9,7 +9,7 @@ import (
 )
 
 type proofOfWorkConformationItf interface {
-	isTokenAceptableStore(token string, requiredHardnes uint, username string) (bool, error)
+	isTokenAceptableStore(token string, requiredHardnes uint, username string) error
 }
 
 func isExpired(now time.Time, expiresTime time.Time) bool {

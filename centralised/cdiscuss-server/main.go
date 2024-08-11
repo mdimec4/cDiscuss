@@ -1,9 +1,12 @@
 package main
 
-import "fmt"
-import "time"
-import "log/slog"
-import "crypto/sha256"
+import (
+	"crypto/sha256"
+	"flag"
+	"fmt"
+	"log/slog"
+	"time"
+)
 
 const instanceIDLen int = 21
 
@@ -11,7 +14,9 @@ var instanceID string
 var db databaseServiceItf
 var mq mqServiceItf
 
-type cbObj struct {
+var doRequireProofOfWorkInRequests *bool = flag.Bool("pow", true, "Enable Proof Of Work for some of requsts (create user, login, create comment)")
+
+type cbObj struct { // TODO remove
 }
 
 // implement mqMessageCbItf

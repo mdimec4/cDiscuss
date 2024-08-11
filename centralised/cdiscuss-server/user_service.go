@@ -5,15 +5,19 @@ import (
 )
 
 type userService struct {
-	sessionStore        sessionStoreItf
-	databaseServiceUser databaseServiceUserItf
+	sessionStore                   sessionStoreItf
+	databaseServiceUser            databaseServiceUserItf
+	proofOfWorkConformation        proofOfWorkConformationItf
+	doRequireProofOfWorkInRequests bool
 }
 
-func newUserService(sessionStore sessionStoreItf, databaseServiceUser databaseServiceUserItf) *userService {
-	return &userService{sessionStore: sessionStore, databaseServiceUser: databaseServiceUser}
+func newUserService(sessionStore sessionStoreItf, databaseServiceUser databaseServiceUserItf,
+	proofOfWorkConformation proofOfWorkConformationItf, doRequireProofOfWorkInRequests bool) *userService {
+	return &userService{sessionStore: sessionStore, databaseServiceUser: databaseServiceUser,
+		proofOfWorkConformation: proofOfWorkConformation, doRequireProofOfWorkInRequests: doRequireProofOfWorkInRequests}
 }
 
-func (userService *userService) login(username string, password string) (*http.Cookie, *user, error) {
+func (userService *userService) login(powString, username string, password string) (*http.Cookie, *user, error) {
 	err := validateUsername(username)
 	if err != nil {
 		return nil, nil, err
@@ -21,6 +25,13 @@ func (userService *userService) login(username string, password string) (*http.C
 	err = validatePassword(password)
 	if err != nil {
 		return nil, nil, err
+	}
+
+	if userService.doRequireProofOfWorkInRequests && userService.proofOfWorkConformation != nil {
+		err = userService.proofOfWorkConformation.isTokenAceptableStore(powString, proofOfWorkLoginRequiredHardnes, username)
+		if err != nil {
+			return nil, nil, err
+		}
 	}
 
 	user, err := userService.databaseServiceUser.authenticateUser(username, password)
