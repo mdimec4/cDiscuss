@@ -22,13 +22,14 @@ const (
 type userServiceItf interface {
 	login(powString string, username string, passwoed string) (*http.Cookie, *user, error)
 	getSessionUser(sessionCookie *http.Cookie) (*user, error)
+	logout(sessionCookie *http.Cookie) error
 
 	getLoginProofOfWorkRequredHardnes() uint
 	getCreateUserProofOfWorkRequredHardnes() uint
 
 	// creates new user in db and creates session
-	// TODO validate username ^[A-Za-z0-9]{4,50}$ because ':' char is not allowed (POW token)
-	createUser(powString string, username string, password string) (*http.Cookie, error)
+	// validates username ^[A-Za-z0-9]{4,50}$ because ':' char is not allowed (POW token)
+	createUser(powString string, username string, password string) (*http.Cookie, *user, error)
 
 	modifyPassword(oldPassword string, newPassword string) error
 
@@ -70,4 +71,18 @@ func validatePassword(password string) error {
 	}
 
 	return nil
+}
+
+func validateSessionCookie(sessionCookie *http.Cookie) (string, error) {
+	if sessionCookie == nil {
+		return "", errUserSessionIsNotValid
+	}
+	if sessionCookie.Name != sessionCookieName {
+		return "", errUserSessionIsNotValid
+	}
+	sessionToken := sessionCookie.Value
+	if sessionToken == "" {
+		return "", errUserSessionIsNotValid
+	}
+	return sessionToken, nil
 }
