@@ -36,9 +36,9 @@ type databaseServiceCommentItf interface {
 }
 
 type user struct {
-	id        int64
-	username  string
-	adminRole bool
+	Id        int64  `json: id`
+	Username  string `json: username`
+	AdminRole bool   `json: adminRole`
 }
 
 type databaseServiceUserItf interface {

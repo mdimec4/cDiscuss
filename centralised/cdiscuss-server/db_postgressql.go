@@ -224,7 +224,7 @@ func (postgresAdapter postgresAdapter) createUser(username string, password stri
 	if err != nil {
 		return nil, fmt.Errorf("Failed to commit user creation: %w", err)
 	}
-	return &user{id: userId, username: username, adminRole: adminRole}, nil
+	return &user{Id: userId, Username: username, AdminRole: adminRole}, nil
 }
 
 func getUserId(tx *sql.Tx, username string) (int64, error) {
@@ -334,7 +334,7 @@ func (postgresAdapter postgresAdapter) authenticateUser(username string, passwor
 	user := &user{}
 	var salt string
 	var pwHash string
-	err := row.Scan(&user.id, &user.username, &salt, &pwHash, &user.adminRole)
+	err := row.Scan(&user.Id, &user.Username, &salt, &pwHash, &user.AdminRole)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, errUserDoesntExist
@@ -358,7 +358,7 @@ func (postgresAdapter postgresAdapter) getUser(id int64) (*user, error) {
 	var row *sql.Row = postgresAdapter.db.QueryRow(query, id)
 
 	user := &user{}
-	err := row.Scan(&user.id, &user.username, &user.adminRole)
+	err := row.Scan(&user.Id, &user.Username, &user.AdminRole)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, errUserDoesntExist
@@ -378,7 +378,7 @@ func (postgresAdapter postgresAdapter) getUserByUsername(username string) (*user
 	var row *sql.Row = postgresAdapter.db.QueryRow(query, username)
 
 	user := &user{}
-	err := row.Scan(&user.id, &user.username, &user.adminRole)
+	err := row.Scan(&user.Id, &user.Username, &user.AdminRole)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, errUserDoesntExist
@@ -448,7 +448,7 @@ func (postgresAdapter postgresAdapter) getSession(tokenHash string) (*time.Time,
 	var dtExpires time.Time
 	var user user
 
-	err := row.Scan(&dtExpires, user.id, &user.username, &user.adminRole)
+	err := row.Scan(&dtExpires, user.Id, &user.Username, &user.AdminRole)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, nil, nil

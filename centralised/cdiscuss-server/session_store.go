@@ -141,7 +141,7 @@ func (session *sessionStore) storeSession(tokenHash string, user *user, expiresT
 	session.sessionTokensMap.Store(tokenHash, sessionData)
 
 	if session.databaseServiceSession != nil {
-		err := session.databaseServiceSession.createSession(tokenHash, user.id, expiresTime)
+		err := session.databaseServiceSession.createSession(tokenHash, user.Id, expiresTime)
 		return err
 	}
 	return nil
@@ -275,7 +275,7 @@ func (session *sessionStore) forgetInMemorySessionsForUser(idUser int64) {
 			slog.Error("Map token cleanup for user is not working, value is not sessionDataContainer")
 			return false
 		}
-		if sessionData.user.id == idUser {
+		if sessionData.user.Id == idUser {
 			session.sessionTokensMap.Delete(key)
 		}
 		return true
