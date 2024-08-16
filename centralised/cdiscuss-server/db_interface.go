@@ -79,6 +79,7 @@ type databaseServiceSessionItf interface {
 	createSession(tokenHash string, idUser int64, dtExpires time.Time) error
 	deleteSession(tokenHash string) error
 	deleteSessionsThatExpired(now time.Time) error
+	deleteSessionsForUser(idUser int64) error
 }
 
 type databaseServiceItf interface {

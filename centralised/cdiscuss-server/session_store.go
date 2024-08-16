@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"sync"
 	"time"
 )
@@ -49,6 +50,7 @@ func newSessionStore(databaseServiceSession databaseServiceSessionItf, mqService
 
 	if session.mqService != nil {
 		session.mqService.registerMessageCB(mqSessionEnd, &session, false)
+		session.mqService.registerMessageCB(mqSessionsForUserEnd, &session, false)
 	}
 
 	return &session, nil
@@ -60,6 +62,14 @@ func (session *sessionStore) onMessage(msg mqMessage) {
 	case mqSessionEnd:
 		tokenHash := msg.Argument
 		session.sessionTokensMap.Delete(tokenHash)
+		break
+	case mqSessionsForUserEnd:
+		idUserStr := msg.Argument
+		idUser, err := strconv.ParseInt(idUserStr, 10, 64)
+		if err != nil {
+			slog.Error("Deleting outdated seassion for user idUser parsing error:", slog.String("idUserStr", idUserStr), slog.Any("error", err))
+		}
+		session.forgetInMemorySessionsForUser(idUser)
 		break
 	}
 }
@@ -252,7 +262,41 @@ func (session *sessionStore) logout(token string) error {
 	if session.mqService != nil {
 		err = session.mqService.sendMessage(mqSessionEnd, tokenHash)
 		if err != nil {
-			slog.Error("sessio store: informing logout to other instancs failed", slog.Any("error", err))
+			slog.Error("session store: informing logout to other instancs failed", slog.Any("error", err))
+		}
+	}
+	return nil
+}
+
+func (session *sessionStore) forgetInMemorySessionsForUser(idUser int64) {
+	session.sessionTokensMap.Range(func(key, value any) bool {
+		sessionData, ok := value.(sessionDataContainer)
+		if !ok {
+			slog.Error("Map token cleanup for user is not working, value is not sessionDataContainer")
+			return false
+		}
+		if sessionData.user.id == idUser {
+			session.sessionTokensMap.Delete(key)
+		}
+		return true
+	})
+}
+
+func (session *sessionStore) forgetSessionsForUser(idUser int64) error {
+	if session.databaseServiceSession != nil {
+		err := session.databaseServiceSession.deleteSessionsForUser(idUser)
+		if err != nil {
+			return fmt.Errorf("Deleting user sessions faild because of database: %w", err)
+		}
+	}
+
+	session.forgetInMemorySessionsForUser(idUser)
+
+	if session.mqService != nil {
+		idUserStr := strconv.FormatInt(idUser, 10)
+		err := session.mqService.sendMessage(mqSessionsForUserEnd, idUserStr)
+		if err != nil {
+			slog.Error("session store: informing user logout to other instancs failed", slog.Any("error", err), slog.Int64("idUser", idUser))
 		}
 	}
 	return nil

@@ -1,7 +1,8 @@
 package main
 
 const (
-	mqSessionEnd = "session end"
+	mqSessionEnd         = "session end"
+	mqSessionsForUserEnd = "sessions for user end"
 )
 
 type mqMessage struct {

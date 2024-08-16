@@ -484,3 +484,12 @@ func (postgresAdapter postgresAdapter) deleteSessionsThatExpired(now time.Time) 
 	}
 	return nil
 }
+
+func (postgresAdapter postgresAdapter) deleteSessionsForUser(idUser int64) error {
+	const query = "DELETE FROM user_sessions WHERE id_user <= $1"
+	_, err := postgresAdapter.db.Exec(query, idUser)
+	if err != nil {
+		return fmt.Errorf("Failed to delete seassions for user <='%d': %w", idUser, err)
+	}
+	return nil
+}
