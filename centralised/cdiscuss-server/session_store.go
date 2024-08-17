@@ -123,7 +123,10 @@ func (session *sessionStore) stop() {
 	})
 	if session.mqService != nil {
 		if err := session.mqService.unregisterMessageCB(mqSessionEnd, session); err != nil {
-			slog.Error("sessionStore unregisterinf MQ CB error:", slog.Any("error", err))
+			slog.Error("sessionStore unregisterinf MQ CB error (mqSessionEnd):", slog.Any("error", err))
+		}
+		if err := session.mqService.unregisterMessageCB(mqSessionsForUserEnd, session); err != nil {
+			slog.Error("sessionStore unregisterinf MQ CB error(mqSessionsForUserEnd):", slog.Any("error", err))
 		}
 	}
 }
