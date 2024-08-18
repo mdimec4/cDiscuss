@@ -5,10 +5,11 @@ import (
 	"flag"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"time"
 )
 
-const instanceIDLen int = 21
+const instanceIDRandomPartLen int = 21
 
 var instanceID string
 var db databaseServiceItf
@@ -24,10 +25,20 @@ func (obj *cbObj) onMessage(msg mqMessage) {
 	fmt.Printf("%v", msg)
 }
 
+func generateNewInstanceID() string {
+	var randomPart string = generateRandomStr(instanceIDRandomPartLen)
+
+	var nowMicro int64 = time.Now().UnixMicro()
+	var nowMicroHexStr string = strconv.FormatInt(nowMicro, 16)
+
+	return randomPart + nowMicroHexStr
+}
+
 func main() {
 	var err error
 
-	instanceID = generateRandomStr(instanceIDLen)
+	instanceID = generateNewInstanceID()
+	slog.Info("New cDiscuss instance", slog.String("instanceID", instanceID))
 
 	dbConnString := "postgresql://postgres:postgres@localhost:5432/cDiscuss?sslmode=disable"
 	db, err = newPostgresAdapter(dbConnString)
