@@ -62,7 +62,7 @@ func main() {
 		slog.Error("send", slog.Any("error", err))
 		return
 	}
-	time.Sleep(3000 * time.Second) // TODO REMOVE
+	time.Sleep(3 * time.Second) // TODO REMOVE
 	user, err := db.createUser("miha", "ahim", false)
 	if err != nil {
 		slog.Error("create user", slog.Any("error", err))
@@ -77,7 +77,7 @@ func main() {
 
 	urlHash := fmt.Sprintf("%x", sha256.Sum256([]byte("https://www.example.com")))
 
-	commentId, err := db.createComment(urlHash, user.Id, time.Now(), "besedilo")
+	commentId, err := db.createComment(nil, urlHash, user.Id, time.Now(), "besedilo")
 	if err != nil {
 		slog.Error("create comment", slog.Any("error", err))
 		return

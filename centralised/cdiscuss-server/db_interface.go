@@ -7,9 +7,11 @@ import "crypto/sha256"
 
 type comment struct {
 	Id          int64     `json: id`
+	IdRoot      *int64    `json: idRoot`
+	IdParent    *int64    `json: idParent`
 	UrlHash     string    `json: urlHash`
 	IdUser      int64     `json: idUser`
-	DtCreated   time.Time `json dtCreated`
+	DtCreated   time.Time `json: dtCreated`
 	CommentBody string    `json: commentBody`
 }
 
@@ -22,16 +24,20 @@ type pageComments struct {
 }
 
 type commentJoinedWithUser struct {
-	Id          int64     `json: id`
-	Username    string    `json: username`
-	DtCreated   time.Time `json dtCreated`
-	CommentBody string    `json: commentBody`
+	Id            int64                  `json: id`
+	IdRoot        *int64                 `json: idRoot`
+	IdParent      *int64                 `json: idParent`
+	ParentComment *commentJoinedWithUser `json: parentComment`
+	IdUser        int64                  `json: idUser`
+	Username      string                 `json: username`
+	DtCreated     time.Time              `json: dtCreated`
+	CommentBody   string                 `json: commentBody`
 }
 
 type databaseServiceCommentItf interface {
 	listPageComments(urlHash string, offset uint64, count uint64) (*pageComments, error)
 	getComment(id int64) (*comment, error)
-	createComment(urlHash string, idUser int64, dtCreated time.Time, commentBody string) (int64, error)
+	createComment(idParent *int64, urlHash string, idUser int64, dtCreated time.Time, commentBody string) (int64, error)
 	deleteComment(id int64) error
 }
 

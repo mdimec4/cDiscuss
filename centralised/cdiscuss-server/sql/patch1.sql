@@ -11,6 +11,8 @@ CREATE INDEX idx_users_username ON users (username);
 
 CREATE TABLE comments (
  id BIGINT PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+ id_root BIGINT,
+ id_parent BIGINT,
  url_hash CHAR(64) NOT NULL, -- sha256
  id_user BIGINT NOT null,
  dt_created TIMESTAMP WITHOUT TIME ZONE NOT NULL,
@@ -19,7 +21,17 @@ CREATE TABLE comments (
  CONSTRAINT fk_comment_user
    FOREIGN KEY(id_user)
    REFERENCES users(id)
-   ON DELETE CASCADE -- if account is deleted, than also drop all od deleted user comments
+   ON DELETE CASCADE, -- if account is deleted, than also drop all od deleted user comments
+
+ CONSTRAINT fk_comment_root
+   FOREIGN KEY(id_root)
+   REFERENCES comments(id)
+   ON DELETE SET NULL,
+
+ CONSTRAINT fk_comment_parent
+   FOREIGN KEY(id_parent)
+   REFERENCES comments(id)
+   ON DELETE SET NULL
 );
 
 CREATE INDEX idx_comments_url_hash ON comments (url_hash);
