@@ -31,10 +31,10 @@ type userServiceItf interface {
 	// validates username ^[A-Za-z0-9]{4,50}$ because ':' char is not allowed (POW token)
 	createUser(powString string, username string, password string) (*http.Cookie, *user, error)
 
-	modifyPassword(oldPassword string, newPassword string) error
+	modifyPassword(sessionCookie *http.Cookie, oldPassword string, newPassword string) error
 
 	// deletes user from db and destroys session
-	deleteAccount() error
+	deleteAccount(sessionCookie *http.Cookie) error
 }
 
 type adminUserServiceItf interface {
@@ -44,7 +44,7 @@ type adminUserServiceItf interface {
 	modifyUserAdminRole(id int64, adminRole bool) error // also modifies existing sessions
 }
 
-var usernameRegex = regexp.MustCompile(`(?m)^[a-zA-Z0-9]*$`) // because of Proof Of Work token format username must not contain ':' char.
+var usernameRegex = regexp.MustCompile(`(?m)^[a-zA-Z0-9_]*$`) // because of Proof Of Work token format username must not contain ':' char.
 
 func validateUsername(username string) error {
 	if len(username) < usernameMinLen {
