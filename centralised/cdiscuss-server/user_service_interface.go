@@ -22,10 +22,10 @@ const (
 type userServiceItf interface {
 	login(powString string, username string, passwoed string) (*http.Cookie, *user, error)
 	getSessionUser(sessionCookie *http.Cookie) (*user, error)
-	logout(sessionCookie *http.Cookie) error
+	logout(sessionCookie *http.Cookie) (*http.Cookie, error)
 
-	getLoginProofOfWorkRequredHardnes() uint
-	getCreateUserProofOfWorkRequredHardnes() uint
+	getLoginProofOfWorkRequiredHardnes() uint
+	getCreateUserProofOfWorkRequiredHardnes() uint
 
 	// creates new user in db and creates session
 	// validates username ^[A-Za-z0-9]{4,50}$ because ':' char is not allowed (POW token)
@@ -34,14 +34,14 @@ type userServiceItf interface {
 	modifyPassword(sessionCookie *http.Cookie, oldPassword string, newPassword string) error
 
 	// deletes user from db and destroys session
-	deleteAccount(sessionCookie *http.Cookie) error
+	deleteAccount(sessionCookie *http.Cookie) (*http.Cookie, error)
 }
 
 type adminUserServiceItf interface {
-	createUser(username string, password string, adminRole bool) (*user, error)
-	deleteUser(idUser int64) error // also destroys existing sessions
-	modifyUserPassword(id int64, oldPassword string, newPassword string) error
-	modifyUserAdminRole(id int64, adminRole bool) error // also modifies existing sessions
+	createUserAsAdmin(username string, password string, adminRole bool) (*user, error)
+	deleteUserAsAdmin(idUser int64) error // also destroys existing sessions
+	modifyUserPasswordAsAdmin(id int64, oldPassword string, newPassword string) error
+	modifyUserAdminRoleAsAdmin(id int64, adminRole bool) error // also modifies existing sessions
 }
 
 var usernameRegex = regexp.MustCompile(`(?m)^[a-zA-Z0-9_]*$`) // because of Proof Of Work token format username must not contain ':' char.

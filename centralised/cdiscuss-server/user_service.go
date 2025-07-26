@@ -56,12 +56,29 @@ func (userService *userService) getSessionUser(sessionCookie *http.Cookie) (*use
 	return userService.sessionStore.getUser(sessionToken)
 }
 
-func (userService *userService) logout(sessionCookie *http.Cookie) error {
+func (userService *userService) logout(sessionCookie *http.Cookie) (*http.Cookie, error) {
 	sessionToken, err := validateSessionCookie(sessionCookie)
 	if err != nil {
-		return err
+		return nul, err
 	}
-	return userService.sessionStore.logout(sessionToken)
+	err = userService.sessionStore.logout(sessionToken)
+	if err != nil {
+		return nul, err
+	}
+
+	sessionCookie.Expires = nil
+	sessionCookie.MaxAge = -1
+
+	return sessionCookie, nil
+}
+
+func (userService *userService) getLoginProofOfWorkRequiredHardnes() uint {
+	return proofOfWorkLoginRequiredHardnes
+}
+
+func (userService *userService) getCreateUserProofOfWorkRequiredHardnes() uint {
+	return proofOfWorkCreateUserRequiredHardnes
+
 }
 
 func (userService *userService) createUser(powString, username string, password string) (*http.Cookie, *user, error) {
@@ -94,4 +111,46 @@ func (userService *userService) createUser(powString, username string, password 
 	cookie := &http.Cookie{Name: sessionCookieName, Value: sessionToken, Expires: expiresTime}
 
 	return cookie, user, nil
+}
+
+func (userService *userService) modifyPassword(sessionCookie *http.Cookie, oldPassword string, newPassword string) error {
+	err = validatePassword(newPassword)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	user, err := userService.getSessionUser(sessionCookie)
+	if err != nil {
+		return nil, err
+	}
+
+	return userService.databaseServiceUser.modifyUserPassword(user.Id, oldPassword, newPassword)
+}
+
+func (userService *userService) modifyPassword(sessionCookie *http.Cookie, oldPassword string, newPassword string) error {
+	err = validatePassword(newPassword)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	user, err := userService.getSessionUser(sessionCookie)
+	if err != nil {
+		return nil, err
+	}
+
+	return userService.databaseServiceUser.modifyUserPassword(user.Id, oldPassword, newPassword)
+}
+
+func (userService *userService) deleteAccount(sessionCookie *http.Cookie) (*http.Cookie, error) {
+	user, err := userService.getSessionUser(sessionCookie)
+	if err != nil {
+		return nil, err
+	}
+
+	err = userService.databaseServiceUser.deleteUser(user.Id)
+	if err != nil {
+		return nil, err
+	}
+
+	return userService.logout(sessionCookie)
 }
