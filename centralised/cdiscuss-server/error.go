@@ -16,6 +16,7 @@ var (
 	errUserDoesntExist        = newValidationError("User doesn't exist.", http.StatusUnauthorized)
 	errCommentDoesntExist     = newValidationError("Comment doesn't exist.", http.StatusNotFound)
 	errUserWrongPassword      = newValidationError("Wrong user password.", http.StatusUnauthorized)
+	errUserNotAdmin           = newValidationError("You need to be an admin to do that.", http.StatusUnauthorized)
 	errUrlHashLen             = newValidationError("Wrong URL hash length.", http.StatusBadRequest)
 	errUsernameTooShort       = newValidationError("Username is too short.", http.StatusBadRequest)
 	errUsernameTooLong        = newValidationError("Username is too long.", http.StatusBadRequest)

@@ -181,7 +181,7 @@ func (session *sessionStore) getUserOrForgetIfExpired(tokenHash string) (*user, 
 	}
 
 	if !tokenFound {
-		return nil, nil
+		return nil, errUserSessionIsNotValid
 	}
 
 	isTokenExpired := isExpired(time.Now(), sessionData.expiresTime)
@@ -204,6 +204,7 @@ func (session *sessionStore) getUserOrForgetIfExpired(tokenHash string) (*user, 
 			}
 		}
 
+		return nil, errUserSessionIsNotValid
 	}
 
 	return sessionData.user, nil

@@ -2,6 +2,7 @@ package main
 
 import (
 	"net/http"
+	"time"
 )
 
 type userService struct {
@@ -59,14 +60,14 @@ func (userService *userService) getSessionUser(sessionCookie *http.Cookie) (*use
 func (userService *userService) logout(sessionCookie *http.Cookie) (*http.Cookie, error) {
 	sessionToken, err := validateSessionCookie(sessionCookie)
 	if err != nil {
-		return nul, err
+		return nil, err
 	}
 	err = userService.sessionStore.logout(sessionToken)
 	if err != nil {
-		return nul, err
+		return nil, err
 	}
 
-	sessionCookie.Expires = nil
+	sessionCookie.Expires = time.Time{}
 	sessionCookie.MaxAge = -1
 
 	return sessionCookie, nil
@@ -114,28 +115,14 @@ func (userService *userService) createUser(powString, username string, password 
 }
 
 func (userService *userService) modifyPassword(sessionCookie *http.Cookie, oldPassword string, newPassword string) error {
-	err = validatePassword(newPassword)
+	err := validatePassword(newPassword)
 	if err != nil {
-		return nil, nil, err
+		return err
 	}
 
 	user, err := userService.getSessionUser(sessionCookie)
 	if err != nil {
-		return nil, err
-	}
-
-	return userService.databaseServiceUser.modifyUserPassword(user.Id, oldPassword, newPassword)
-}
-
-func (userService *userService) modifyPassword(sessionCookie *http.Cookie, oldPassword string, newPassword string) error {
-	err = validatePassword(newPassword)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	user, err := userService.getSessionUser(sessionCookie)
-	if err != nil {
-		return nil, err
+		return err
 	}
 
 	return userService.databaseServiceUser.modifyUserPassword(user.Id, oldPassword, newPassword)
@@ -153,4 +140,26 @@ func (userService *userService) deleteAccount(sessionCookie *http.Cookie) (*http
 	}
 
 	return userService.logout(sessionCookie)
+}
+
+func (userService *userService) createUserAsAdmin(sessionCookie *http.Cookie, username string, password string, adminRole bool) (*user, error) {
+	user, err := userService.getSessionUser(sessionCookie)
+	if err != nil {
+		return nil, err
+	}
+
+	if !user.AdminRole {
+		return nil, errUserNotAdmin
+	}
+
+	err = validateUsername(username)
+	if err != nil {
+		return nil, err
+	}
+	err = validatePassword(password)
+	if err != nil {
+		return nil, err
+	}
+
+	return userService.databaseServiceUser.createUser(username, password, adminRole)
 }

@@ -38,10 +38,10 @@ type userServiceItf interface {
 }
 
 type adminUserServiceItf interface {
-	createUserAsAdmin(username string, password string, adminRole bool) (*user, error)
-	deleteUserAsAdmin(idUser int64) error // also destroys existing sessions
-	modifyUserPasswordAsAdmin(id int64, oldPassword string, newPassword string) error
-	modifyUserAdminRoleAsAdmin(id int64, adminRole bool) error // also modifies existing sessions
+	createUserAsAdmin(sessionCookie *http.Cookie, username string, password string, adminRole bool) (*user, error)
+	deleteUserAsAdmin(sessionCookie *http.Cookie, idUser int64) error // also destroys existing sessions
+	modifyUserPasswordAsAdmin(sessionCookie *http.Cookie, id int64, oldPassword string, newPassword string) error
+	modifyUserAdminRoleAsAdmin(sessionCookie *http.Cookie, id int64, adminRole bool) error // also modifies existing sessions
 }
 
 var usernameRegex = regexp.MustCompile(`(?m)^[a-zA-Z0-9_]*$`) // because of Proof Of Work token format username must not contain ':' char.
