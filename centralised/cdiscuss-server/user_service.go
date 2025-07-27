@@ -142,8 +142,16 @@ func (userService *userService) deleteAccount(sessionCookie *http.Cookie) (*http
 	return userService.logout(sessionCookie)
 }
 
-func (userService *userService) createUserAsAdmin(sessionCookie *http.Cookie, username string, password string, adminRole bool) (*user, error) {
-	user, err := userService.getSessionUser(sessionCookie)
+type adminUserService struct {
+	userService *userService
+}
+
+func newAdmiUserService(userService *userService) *adminUserService {
+	return &adminUserService{userService: userService}
+}
+
+func (adminUserService *adminUserService) createUserAsAdmin(sessionCookie *http.Cookie, username string, password string, adminRole bool) (*user, error) {
+	user, err := adminUserService.userService.getSessionUser(sessionCookie)
 	if err != nil {
 		return nil, err
 	}
@@ -161,11 +169,11 @@ func (userService *userService) createUserAsAdmin(sessionCookie *http.Cookie, us
 		return nil, err
 	}
 
-	return userService.databaseServiceUser.createUser(username, password, adminRole)
+	return adminUserService.userService.databaseServiceUser.createUser(username, password, adminRole)
 }
 
-func (userService *userService) deleteUserAsAdmin(sessionCookie *http.Cookie, idUser int64) error {
-	user, err := userService.getSessionUser(sessionCookie)
+func (adminUserService *adminUserService) deleteUserAsAdmin(sessionCookie *http.Cookie, idUser int64) error {
+	user, err := adminUserService.userService.getSessionUser(sessionCookie)
 	if err != nil {
 		return err
 	}
@@ -173,16 +181,16 @@ func (userService *userService) deleteUserAsAdmin(sessionCookie *http.Cookie, id
 	if !user.AdminRole {
 		return errUserNotAdmin
 	}
-	err = userService.databaseServiceUser.deleteUser(idUser)
+	err = adminUserService.userService.databaseServiceUser.deleteUser(idUser)
 	if err != nil {
 		return err
 	}
 
-	return userService.sessionStore.forgetSessionsForUser(idUser)
+	return adminUserService.userService.sessionStore.forgetSessionsForUser(idUser)
 }
 
-func (userService *userService) modifyUserAdminRoleAsAdmin(sessionCookie *http.Cookie, idUser int64, adminRole bool) error {
-	user, err := userService.getSessionUser(sessionCookie)
+func (adminUserService *adminUserService) modifyUserAdminRoleAsAdmin(sessionCookie *http.Cookie, idUser int64, adminRole bool) error {
+	user, err := adminUserService.userService.getSessionUser(sessionCookie)
 	if err != nil {
 		return err
 	}
@@ -190,10 +198,10 @@ func (userService *userService) modifyUserAdminRoleAsAdmin(sessionCookie *http.C
 	if !user.AdminRole {
 		return errUserNotAdmin
 	}
-	err = userService.databaseServiceUser.modifyUserAdminRole(idUser, adminRole)
+	err = adminUserService.userService.databaseServiceUser.modifyUserAdminRole(idUser, adminRole)
 	if err != nil {
 		return err
 	}
 
-	return userService.sessionStore.forgetSessionsForUser(idUser)
+	return adminUserService.userService.sessionStore.forgetSessionsForUser(idUser)
 }
