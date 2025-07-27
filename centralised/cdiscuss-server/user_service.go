@@ -163,3 +163,37 @@ func (userService *userService) createUserAsAdmin(sessionCookie *http.Cookie, us
 
 	return userService.databaseServiceUser.createUser(username, password, adminRole)
 }
+
+func (userService *userService) deleteUserAsAdmin(sessionCookie *http.Cookie, idUser int64) error {
+	user, err := userService.getSessionUser(sessionCookie)
+	if err != nil {
+		return err
+	}
+
+	if !user.AdminRole {
+		return errUserNotAdmin
+	}
+	err = userService.databaseServiceUser.deleteUser(idUser)
+	if err != nil {
+		return err
+	}
+
+	return userService.sessionStore.forgetSessionsForUser(idUser)
+}
+
+func (userService *userService) modifyUserAdminRoleAsAdmin(sessionCookie *http.Cookie, idUser int64, adminRole bool) error {
+	user, err := userService.getSessionUser(sessionCookie)
+	if err != nil {
+		return err
+	}
+
+	if !user.AdminRole {
+		return errUserNotAdmin
+	}
+	err = userService.databaseServiceUser.modifyUserAdminRole(idUser, adminRole)
+	if err != nil {
+		return err
+	}
+
+	return userService.sessionStore.forgetSessionsForUser(idUser)
+}

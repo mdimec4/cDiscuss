@@ -29,4 +29,5 @@ type sessionStoreItf interface {
 	newSession(user *user) (string, time.Time, error)
 	getUser(token string) (*user, error)
 	logout(token string) error
+	forgetSessionsForUser(idUser int64) error
 }
