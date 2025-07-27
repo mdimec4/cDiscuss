@@ -5,9 +5,10 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	_ "github.com/lib/pq"
 	"log/slog"
 	"time"
+
+	_ "github.com/lib/pq"
 )
 
 // implements interfaces: databaseServiceCommentItf, databaseServiceUserItf,
@@ -261,9 +262,9 @@ func (postgresAdapter postgresAdapter) createComment(idParent *int64, urlHash st
 	return commentId, nil
 }
 
-func (postgresAdapter postgresAdapter) deleteComment(id int64) error {
-	const query = "DELETE FROM comments WHERE id=$1"
-	_, err := postgresAdapter.db.Exec(query, id)
+func (postgresAdapter postgresAdapter) deleteComment(id, idUser int64, adminRole bool) error {
+	const query = "DELETE FROM comments WHERE id=$1 AND (id_user=$2 OR $3)"
+	_, err := postgresAdapter.db.Exec(query, id, idUser, adminRole)
 	if err != nil {
 		return fmt.Errorf("Failed to delete a comment id=%d: %w", id, err)
 	}

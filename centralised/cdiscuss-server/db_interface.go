@@ -1,9 +1,11 @@
 package main
 
-import "fmt"
-import "time"
-import "errors"
-import "crypto/sha256"
+import (
+	"crypto/sha256"
+	"errors"
+	"fmt"
+	"time"
+)
 
 type comment struct {
 	Id          int64     `json: id`
@@ -38,7 +40,7 @@ type databaseServiceCommentItf interface {
 	listPageComments(urlHash string, offset uint64, count uint64) (*pageComments, error)
 	getComment(id int64) (*comment, error)
 	createComment(idParent *int64, urlHash string, idUser int64, dtCreated time.Time, commentBody string) (int64, error)
-	deleteComment(id int64) error
+	deleteComment(id, idUser int64, adminRole bool) error
 }
 
 type user struct {
