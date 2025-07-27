@@ -143,11 +143,13 @@ func (userService *userService) deleteAccount(sessionCookie *http.Cookie) (*http
 }
 
 type adminUserService struct {
-	userService *userService
+	userService         userServiceItf
+	sessionStore        sessionStoreItf
+	databaseServiceUser databaseServiceUserItf
 }
 
-func newAdmiUserService(userService *userService) *adminUserService {
-	return &adminUserService{userService: userService}
+func newAdmiUserService(userService userServiceItf, sessionStore sessionStoreItf, databaseServiceUser databaseServiceUserItf) *adminUserService {
+	return &adminUserService{userService: userService, sessionStore: sessionStore, databaseServiceUser: databaseServiceUser}
 }
 
 func (adminUserService *adminUserService) createUserAsAdmin(sessionCookie *http.Cookie, username string, password string, adminRole bool) (*user, error) {
@@ -169,7 +171,7 @@ func (adminUserService *adminUserService) createUserAsAdmin(sessionCookie *http.
 		return nil, err
 	}
 
-	return adminUserService.userService.databaseServiceUser.createUser(username, password, adminRole)
+	return adminUserService.databaseServiceUser.createUser(username, password, adminRole)
 }
 
 func (adminUserService *adminUserService) deleteUserAsAdmin(sessionCookie *http.Cookie, idUser int64) error {
@@ -181,12 +183,12 @@ func (adminUserService *adminUserService) deleteUserAsAdmin(sessionCookie *http.
 	if !user.AdminRole {
 		return errUserNotAdmin
 	}
-	err = adminUserService.userService.databaseServiceUser.deleteUser(idUser)
+	err = adminUserService.databaseServiceUser.deleteUser(idUser)
 	if err != nil {
 		return err
 	}
 
-	return adminUserService.userService.sessionStore.forgetSessionsForUser(idUser)
+	return adminUserService.sessionStore.forgetSessionsForUser(idUser)
 }
 
 func (adminUserService *adminUserService) modifyUserAdminRoleAsAdmin(sessionCookie *http.Cookie, idUser int64, adminRole bool) error {
@@ -198,10 +200,10 @@ func (adminUserService *adminUserService) modifyUserAdminRoleAsAdmin(sessionCook
 	if !user.AdminRole {
 		return errUserNotAdmin
 	}
-	err = adminUserService.userService.databaseServiceUser.modifyUserAdminRole(idUser, adminRole)
+	err = adminUserService.databaseServiceUser.modifyUserAdminRole(idUser, adminRole)
 	if err != nil {
 		return err
 	}
 
-	return adminUserService.userService.sessionStore.forgetSessionsForUser(idUser)
+	return adminUserService.sessionStore.forgetSessionsForUser(idUser)
 }
