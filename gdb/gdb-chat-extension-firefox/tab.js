@@ -101,7 +101,9 @@
                 await rbac.createSecurityContext(db, SUPERADMIN_ADDRESSES);
 
                 rbac.setCustomRoles(CHAT_APP_ROLES);
-				await rbac.assignRole(SUPERADMIN_ADDRESSES[0], 'superadmin').catch(() => {});
+				await rbac.assignRole(SUPERADMIN_ADDRESSES[0], 'superadmin').catch(() => {
+					throw new Error("assign superadmin role fail:" + err.message);
+				});
                 rbac.setSecurityStateChangeCallback(updateUI);
                 
                 // Trigger initial UI update based on current state (e.g. from silent WebAuthn login)
