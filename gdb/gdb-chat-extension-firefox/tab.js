@@ -8,7 +8,7 @@
         // IMPORTANT: For a user to be superadmin on first registration,
         // their generated ETH address MUST be in this list.
         // You can leave it empty and assign roles later if you build an admin UI.
-        const SUPERADMIN_ADDRESSES = ["0x0707eeB901d6c78bD0b3b31C2C6F5E00DF8f26Dd", "0x6ac5a9DB5539A2595fb5F63EDb7Cf3C601322006"]; // Replace or add your desired superadmin ETH address(es)
+        const SUPERADMIN_ADDRESSES = ["0x0707eeB901d6c78bD0b3b31C2C6F5E00DF8f26Dd"]; // Replace or add your desired superadmin ETH address(es)
 
         // --- DOM Elements ---
         const authSection = document.getElementById('authSection');
@@ -101,6 +101,7 @@
                 await rbac.createSecurityContext(db, SUPERADMIN_ADDRESSES);
 
                 rbac.setCustomRoles(CHAT_APP_ROLES);
+				await rbac.assignRole(SUPERADMIN_ADDRESSES[0], 'superadmin').catch(() => {});
                 rbac.setSecurityStateChangeCallback(updateUI);
                 
                 // Trigger initial UI update based on current state (e.g. from silent WebAuthn login)
@@ -171,6 +172,7 @@
                 const loggedInAddress = await rbac.loginCurrentUserWithWebAuthn();
                 if (loggedInAddress) {
                     alert(`Logged in with WebAuthn as ${loggedInAddress}`);
+					await ensureUserRole(loggedInAddress); // Ensure they have 'user' role
                 } else {
                     alert("WebAuthn login failed. Have you registered WebAuthn for this site?");
                 }
@@ -190,6 +192,7 @@
                 const identity = await rbac.loginOrRecoverUserWithMnemonic(mnemonic);
                 if (identity) {
                     alert(`Logged in with mnemonic for address ${identity.address}`);
+					await ensureUserRole(identity.address); // Ensure they have 'user' role
                     inputMnemonic.value = ''; // Clear after use
                     // User might want to protect this session with WebAuthn now
                     // For simplicity, we don't auto-prompt that here.
@@ -201,6 +204,27 @@
                 alert(`Mnemonic login error: ${error.message}`);
             }
         };
+		
+		
+		async function ensureUserRole(address) {
+			try {
+				const roleEntry = await db.get({ type: 'role', ethAddress: address });
+				if (roleEntry && roleEntry.role) {
+					console.log(`User ${address} already has role: ${roleEntry.role}`);
+					return; // Role exists, nothing to do.
+				}
+
+				// Role not found, assign 'user' role
+				console.log(`Assigning 'user' role to ${address}...`);
+				await rbac.assignRole(address, 'user');
+				console.log(`Role 'user' assigned to ${address}`);
+			} catch (error) {
+				console.error("Failed during role check/assignment:", error);
+				alert(`Failed to assign role: ${error.message}`);
+			}
+		}
+			
+		
         
         btnLogout.onclick = async () => {
             try {
