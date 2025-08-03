@@ -67,18 +67,22 @@
             btnLoginWebAuthn.disabled = !securityState.hasWebAuthnHardwareRegistration;
 
             if (securityState.isActive) {
-				for (let i = 0; i < SUPERADMIN_ADDRESSES.length; i++)
-				{
-			        await rbac.assignRole(SUPERADMIN_ADDRESSES[i], 'superadmin').catch((err) => {
+                for (let i = 0; i < SUPERADMIN_ADDRESSES.length; i++)
+                {
+                    await rbac.assignRole(SUPERADMIN_ADDRESSES[i], 'superadmin').catch((err) => {
                         throw new Error("assign superadmin role fail:" + err.message);
-				    });
-				}
-				
+                    });
+                }
+                chrome.runtime.sendMessage({ action: 'setSecurityContextActive', value: true });
+                
                 authSection.classList.add('hidden');
                 chatSection.classList.remove('hidden');
                 newIdentityInfo.classList.add('hidden'); // Hide registration info if logged in
                 loadMessages();
             } else {
+                chrome.runtime.sendMessage({ action: 'setSecurityContextActive', value: false });
+                chrome.runtime.sendMessage({ action: 'setMnemnonic', value: ""});
+                
                 authSection.classList.remove('hidden');
                 chatSection.classList.add('hidden');
                 if (unsubscribeMessages) {
@@ -98,21 +102,51 @@
         }
         
         // --- INITIALIZATION ---
-        async function initializeApp() {
-            try {
+        async function initializeApp(doInitSecurityContext) {
+            try 
+			{
                 statusBar.textContent = "Status: Initializing DB...";
                 db = new GDB("cDiscuss-DB");
 
                 statusBar.textContent = "Status: DB Ready. Initializing Security Context...";
 
-                await rbac.createSecurityContext(db, SUPERADMIN_ADDRESSES);
-
-                rbac.setCustomRoles(CHAT_APP_ROLES);
+                if (doInitSecurityContext)
+                {
+                    await rbac.createSecurityContext(db, SUPERADMIN_ADDRESSES);
+                    rbac.setCustomRoles(CHAT_APP_ROLES);
+                }
                 rbac.setSecurityStateChangeCallback(updateUI);
                 
                 // Trigger initial UI update based on current state (e.g. from silent WebAuthn login)
                 // The callback itself will be called by createSecurityContext, but to be safe:
-                const initialState = {
+                        
+                if (!rbac.isSecurityActive())
+                // Attempt silent WebAuthn login if available
+                    if (rbac.hasExistingWebAuthnRegistration()) {
+                        console.log("Attempting silent WebAuthn login...");
+                        await rbac.loginCurrentUserWithWebAuthn().catch(err => console.warn("Silent WebAuthn login failed or no registration:", err.message));
+                    }
+                    else if (!doInitSecurityContext)
+                    {
+                        chrome.runtime.sendMessage({ action: 'getMnemonic' }, async (response) => {
+                            if (response && response.activeMnemnonic && response.activeMnemnonic.length > 0) {
+								let mnemonic = response.activeMnemnonic;
+                                const identity = await rbac.loginOrRecoverUserWithMnemonic(mnemonic);
+                                if (identity) {
+                                    
+                                    alert(`Logged in with mnemonic for address ${identity.address}`);
+                                    //await ensureUserRole(identity.address); // Ensure they have 'user' role
+                                    inputMnemonic.value = ''; // Clear after use
+                                    // User might want to protect this session with WebAuthn now
+                                    // For simplicity, we don't auto-prompt that here.
+                                } else {
+                                    alert("Failed to login with mnemonic. Please check the phrase.");
+                                }
+                            }
+                        });
+                    }
+			
+				const initialState = {
                     isActive: rbac.isSecurityActive(),
                     activeAddress: rbac.getActiveEthAddress(),
                     isWebAuthnProtected: rbac.isCurrentSessionProtectedByWebAuthn(),
@@ -121,14 +155,7 @@
                 };
                 
                 updateUI(initialState);
-                
-                // Attempt silent WebAuthn login if available
-                if (rbac.hasExistingWebAuthnRegistration() && !rbac.isSecurityActive()) {
-                    console.log("Attempting silent WebAuthn login...");
-                    await rbac.loginCurrentUserWithWebAuthn().catch(err => console.warn("Silent WebAuthn login failed or no registration:", err.message));
-                }
-
-
+					
             } catch (error) {
                 console.error("Initialization failed:", error);
                 statusBar.textContent = `Error: ${error.message}`;
@@ -197,6 +224,8 @@
             try {
                 const identity = await rbac.loginOrRecoverUserWithMnemonic(mnemonic);
                 if (identity) {
+                    chrome.runtime.sendMessage({ action: 'setMnemonic', value: mnemonic});
+                    
                     alert(`Logged in with mnemonic for address ${identity.address}`);
                     await ensureUserRole(identity.address); // Ensure they have 'user' role
                     inputMnemonic.value = ''; // Clear after use
@@ -330,6 +359,9 @@
 //// MMMM
 let pageHash = "";
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+	if (message.action !== "init")
+		return;
+	
     console.log("Received in tab:", message.myData);
     pageHash = message.myData.urlHash;
     
@@ -339,5 +371,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     document.title = "Chat: " + message.myData.title;
     divHash.textContent = message.myData.urlHash;
     // Start the application
-    initializeApp();
+    chrome.runtime.sendMessage({ action: 'checkSecurityContext' }, (response) => {
+        if (response && response.isActive) {
+            console.log("Security context already active in another tab.");
+            // Sync state if necessary (optional)
+            initializeApp(false);
+        } else {
+            console.log("Initializing Security Context in this tab...");
+            initializeApp(true);  // your existing function to initialize
+        }
+    });
 });
