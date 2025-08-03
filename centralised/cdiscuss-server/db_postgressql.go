@@ -5,9 +5,10 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	_ "github.com/lib/pq"
 	"log/slog"
 	"time"
+
+	_ "github.com/lib/pq"
 )
 
 // implements interfaces: databaseServiceCommentItf, databaseServiceUserItf,
@@ -97,10 +98,14 @@ func getComments(tx *sql.Tx, urlHash string, offset uint64, count uint64) ([]com
 		return nil, errUrlHashLen
 	}
 
-	const query = `SELECT cm.id, us.username, cm.dt_created, cm.comment_body FROM comments cm
-	INNER JOIN users us ON cm.id_user=us.id
+	const query = `SELECT cm.id, cm.id_root, cm.id_parent, cm.id_user, us.username, cm.dt_created, cm.comment_body,
+	parent_cm.id, parent_cm.id_root, parent_cm.id_parent, parent_cm.id_user, parent_us.username, parent_cm.dt_created, parent_cm.comment_body
+	FROM comments cm
+	INNER JOIN users us ON cm.id_user = us.id
+	LEFT JOIN comments parent_cm ON parent_cm.url_hash = cm.url_hash AND parent_cm.id = cm.id_parent
+	LEFT JOIN users parent_us ON parent_cm.id_user = parent_us.id
 	WHERE cm.url_hash=$1 
-	ORDER BY cm.id DESC OFFSET $2 LIMIT $3`
+	ORDER BY cm.id ASC OFFSET $2 LIMIT $3`
 
 	rows, err := tx.Query(query, urlHash, offset, count)
 	if err != nil {
@@ -114,11 +119,45 @@ func getComments(tx *sql.Tx, urlHash string, offset uint64, count uint64) ([]com
 	commentsSlice := make([]commentJoinedWithUser, 0, initialSliceCap)
 
 	for rows.Next() {
+		var (
+			cmtIdRoot         sql.NullInt64
+			cmtIdParent       sql.NullInt64
+			parCmtId          sql.NullInt64
+			parCmtIdRoot      sql.NullInt64
+			parCmtIdParent    sql.NullInt64
+			parCmtIdUser      sql.NullInt64
+			parCmtUsername    sql.NullString
+			parCmtDtCreated   sql.NullTime
+			parCmtCommentBody sql.NullString
+		)
+
 		comment := commentJoinedWithUser{}
-		err = rows.Scan(&comment.Id, &comment.Username, &comment.DtCreated, &comment.CommentBody)
+		err = rows.Scan(&comment.Id, &cmtIdRoot, &cmtIdParent, &comment.IdUser, &comment.Username, &comment.DtCreated, &comment.CommentBody,
+			&parCmtId, &parCmtIdRoot, &parCmtIdParent, &parCmtIdUser, &parCmtUsername, &parCmtDtCreated, &parCmtCommentBody)
 		if err != nil {
 			return nil, err
 		}
+		if cmtIdRoot.Valid {
+			comment.IdRoot = &cmtIdRoot.Int64
+		}
+		if cmtIdParent.Valid {
+			comment.IdParent = &cmtIdParent.Int64
+		}
+
+		if parCmtId.Valid && parCmtCommentBody.Valid {
+			parentComment := commentJoinedWithUser{Id: parCmtId.Int64, IdUser: parCmtIdUser.Int64, Username: parCmtUsername.String,
+				DtCreated: parCmtDtCreated.Time, CommentBody: parCmtCommentBody.String}
+
+			if parCmtIdRoot.Valid {
+				parentComment.IdRoot = &parCmtIdRoot.Int64
+			}
+			if parCmtIdParent.Valid {
+				parentComment.IdParent = &parCmtIdParent.Int64
+			}
+
+			comment.ParentComment = &parentComment
+		}
+
 		commentsSlice = append(commentsSlice, comment)
 	}
 	err = rows.Err()
@@ -129,21 +168,37 @@ func getComments(tx *sql.Tx, urlHash string, offset uint64, count uint64) ([]com
 }
 
 func (postgresAdapter postgresAdapter) getComment(id int64) (*comment, error) {
-	const query = "SELECT id, url_hash, id_user, dt_created, comment_body FROM comments WHERE id=$1 LIMIT 1"
+	var (
+		cmtIdRoot   sql.NullInt64
+		cmtIdParent sql.NullInt64
+	)
+
+	const query = "SELECT id, id_root, id_parent, url_hash, id_user, dt_created, comment_body FROM comments WHERE id=$1 LIMIT 1"
 	var row *sql.Row = postgresAdapter.db.QueryRow(query, id)
 
 	comment := &comment{}
-	err := row.Scan(&comment.Id, &comment.UrlHash, &comment.DtCreated, &comment.CommentBody)
+	err := row.Scan(&comment.Id, &cmtIdRoot, &cmtIdParent, &comment.UrlHash, &comment.DtCreated, &comment.CommentBody)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return comment, errCommentDoesntExist
 		}
 		return nil, fmt.Errorf("Failed to query a comment id=%d: %w", id, err)
 	}
+	if cmtIdRoot.Valid {
+		comment.IdRoot = &cmtIdRoot.Int64
+	}
+	if cmtIdParent.Valid {
+		comment.IdParent = &cmtIdParent.Int64
+	}
 	return comment, nil
 }
 
-func (postgresAdapter postgresAdapter) createComment(urlHash string, idUser int64, dtCreated time.Time, commentBody string) (int64, error) {
+func (postgresAdapter postgresAdapter) createComment(idParent *int64, urlHash string, idUser int64, dtCreated time.Time, commentBody string) (int64, error) {
+	var (
+		idRoot     *int64 = nil
+		readIdRoot sql.NullInt64
+	)
+
 	if len(urlHash) != urlHashLen {
 		return -1, errUrlHashLen
 	}
@@ -152,19 +207,64 @@ func (postgresAdapter postgresAdapter) createComment(urlHash string, idUser int6
 		return -1, fmt.Errorf("Failed to crate a comment urlHash=%s, idUser=%d: empty comment body", urlHash, idUser)
 	}
 
-	var commentId int64
-	const query = "INSERT INTO comments (url_hash, id_user, dt_created, comment_body) VALUES($1, $2, $3, $4) RETURNING id"
-	row := postgresAdapter.db.QueryRow(query, urlHash, idUser, dtCreated, commentBody)
-	err := row.Scan(&commentId)
+	tx, err := postgresAdapter.db.BeginTx(context.Background(), &sql.TxOptions{Isolation: sql.LevelReadCommitted, ReadOnly: false})
 	if err != nil {
+		return -1, fmt.Errorf("Error creating comment (create transaction): %w", err)
+	}
+
+	if idParent != nil {
+		const queryIdRoot = "SELECT id_root FROM comments WHERE url_hash = $1 AND id = $2"
+		row := tx.QueryRow(queryIdRoot, urlHash, idParent)
+		err := row.Scan(&readIdRoot)
+		if err != nil {
+			err2 := tx.Rollback()
+			if err2 != nil {
+				slog.Error("Failed to rollback comment creation!", slog.Any("error", err2))
+			}
+			if errors.Is(err, sql.ErrNoRows) {
+				return -1, errCommentDoesntExist
+			}
+			return -1, fmt.Errorf("Error creating comment (get parent root id): %w", err)
+		}
+		if readIdRoot.Valid {
+			idRoot = &readIdRoot.Int64
+		}
+	}
+
+	var commentId int64
+	const query = "INSERT INTO comments (id_root, id_parent, url_hash, id_user, dt_created, comment_body) VALUES($1, $2, $3, $4, $5, $6) RETURNING id"
+	row := tx.QueryRow(query, idRoot, idParent, urlHash, idUser, dtCreated, commentBody)
+	err = row.Scan(&commentId)
+	if err != nil {
+		err2 := tx.Rollback()
+		if err2 != nil {
+			slog.Error("Failed to rollback comment creation!", slog.Any("or", err2))
+		}
 		return -1, fmt.Errorf("Failed to crate a comment urlHash=%s, idUser=%d: %w", urlHash, idUser, err)
+	}
+
+	if idParent == nil {
+		const updateQuery = "UPDATE comments SET id_root = id WHERE id = $1"
+		_, err := tx.Exec(updateQuery, commentId)
+		if err != nil {
+			err2 := tx.Rollback()
+			if err2 != nil {
+				slog.Error("Failed to rollback comment creation! (id_root update)", slog.Any("error", err2))
+			}
+			return -1, fmt.Errorf("Failed to crate a comment (id_root update)  urlHash=%s, idUser=%d: %w", urlHash, idUser, err)
+		}
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		return -1, fmt.Errorf("Failed to commit comment creation: %w", err)
 	}
 	return commentId, nil
 }
 
-func (postgresAdapter postgresAdapter) deleteComment(id int64) error {
-	const query = "DELETE FROM comments WHERE id=$1"
-	_, err := postgresAdapter.db.Exec(query, id)
+func (postgresAdapter postgresAdapter) deleteComment(id, idUser int64, adminRole bool) error {
+	const query = "DELETE FROM comments WHERE id=$1 AND (id_user=$2 OR $3)"
+	_, err := postgresAdapter.db.Exec(query, id, idUser, adminRole)
 	if err != nil {
 		return fmt.Errorf("Failed to delete a comment id=%d: %w", id, err)
 	}

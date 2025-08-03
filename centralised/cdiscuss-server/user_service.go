@@ -2,6 +2,7 @@ package main
 
 import (
 	"net/http"
+	"time"
 )
 
 type userService struct {
@@ -56,12 +57,29 @@ func (userService *userService) getSessionUser(sessionCookie *http.Cookie) (*use
 	return userService.sessionStore.getUser(sessionToken)
 }
 
-func (userService *userService) logout(sessionCookie *http.Cookie) error {
+func (userService *userService) logout(sessionCookie *http.Cookie) (*http.Cookie, error) {
 	sessionToken, err := validateSessionCookie(sessionCookie)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	return userService.sessionStore.logout(sessionToken)
+	err = userService.sessionStore.logout(sessionToken)
+	if err != nil {
+		return nil, err
+	}
+
+	sessionCookie.Expires = time.Time{}
+	sessionCookie.MaxAge = -1
+
+	return sessionCookie, nil
+}
+
+func (userService *userService) getLoginProofOfWorkRequiredHardnes() uint {
+	return proofOfWorkLoginRequiredHardnes
+}
+
+func (userService *userService) getCreateUserProofOfWorkRequiredHardnes() uint {
+	return proofOfWorkCreateUserRequiredHardnes
+
 }
 
 func (userService *userService) createUser(powString, username string, password string) (*http.Cookie, *user, error) {
@@ -94,4 +112,98 @@ func (userService *userService) createUser(powString, username string, password 
 	cookie := &http.Cookie{Name: sessionCookieName, Value: sessionToken, Expires: expiresTime}
 
 	return cookie, user, nil
+}
+
+func (userService *userService) modifyPassword(sessionCookie *http.Cookie, oldPassword string, newPassword string) error {
+	err := validatePassword(newPassword)
+	if err != nil {
+		return err
+	}
+
+	user, err := userService.getSessionUser(sessionCookie)
+	if err != nil {
+		return err
+	}
+
+	return userService.databaseServiceUser.modifyUserPassword(user.Id, oldPassword, newPassword)
+}
+
+func (userService *userService) deleteAccount(sessionCookie *http.Cookie) (*http.Cookie, error) {
+	user, err := userService.getSessionUser(sessionCookie)
+	if err != nil {
+		return nil, err
+	}
+
+	err = userService.databaseServiceUser.deleteUser(user.Id)
+	if err != nil {
+		return nil, err
+	}
+
+	return userService.logout(sessionCookie)
+}
+
+type adminUserService struct {
+	userService         userServiceItf
+	sessionStore        sessionStoreItf
+	databaseServiceUser databaseServiceUserItf
+}
+
+func newAdmiUserService(userService userServiceItf, sessionStore sessionStoreItf, databaseServiceUser databaseServiceUserItf) *adminUserService {
+	return &adminUserService{userService: userService, sessionStore: sessionStore, databaseServiceUser: databaseServiceUser}
+}
+
+func (adminUserService *adminUserService) createUserAsAdmin(sessionCookie *http.Cookie, username string, password string, adminRole bool) (*user, error) {
+	user, err := adminUserService.userService.getSessionUser(sessionCookie)
+	if err != nil {
+		return nil, err
+	}
+
+	if !user.AdminRole {
+		return nil, errUserNotAdmin
+	}
+
+	err = validateUsername(username)
+	if err != nil {
+		return nil, err
+	}
+	err = validatePassword(password)
+	if err != nil {
+		return nil, err
+	}
+
+	return adminUserService.databaseServiceUser.createUser(username, password, adminRole)
+}
+
+func (adminUserService *adminUserService) deleteUserAsAdmin(sessionCookie *http.Cookie, idUser int64) error {
+	user, err := adminUserService.userService.getSessionUser(sessionCookie)
+	if err != nil {
+		return err
+	}
+
+	if !user.AdminRole {
+		return errUserNotAdmin
+	}
+	err = adminUserService.databaseServiceUser.deleteUser(idUser)
+	if err != nil {
+		return err
+	}
+
+	return adminUserService.sessionStore.forgetSessionsForUser(idUser)
+}
+
+func (adminUserService *adminUserService) modifyUserAdminRoleAsAdmin(sessionCookie *http.Cookie, idUser int64, adminRole bool) error {
+	user, err := adminUserService.userService.getSessionUser(sessionCookie)
+	if err != nil {
+		return err
+	}
+
+	if !user.AdminRole {
+		return errUserNotAdmin
+	}
+	err = adminUserService.databaseServiceUser.modifyUserAdminRole(idUser, adminRole)
+	if err != nil {
+		return err
+	}
+
+	return adminUserService.sessionStore.forgetSessionsForUser(idUser)
 }
