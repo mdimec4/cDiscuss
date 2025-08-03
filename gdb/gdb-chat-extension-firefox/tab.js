@@ -29,10 +29,10 @@
         const inputMessage = document.getElementById('inputMessage');
         const btnSendMessage = document.getElementById('btnSendMessage');
         const btnLogout = document.getElementById('btnLogout');
-		
-		const imgFavicon = document.getElementById('imgFavicon');
-		const aPageLink = document.getElementById('aPageLink');
-		const divHash  = document.getElementById('divHash');
+        
+        const imgFavicon = document.getElementById('imgFavicon');
+        const aPageLink = document.getElementById('aPageLink');
+        const divHash  = document.getElementById('divHash');
 
         // --- APP STATE ---
         let db;
@@ -49,7 +49,7 @@
         };
 
         // --- UI UPDATE LOGIC ---
-        function updateUI(securityState) {
+        async function updateUI(securityState) {
             if (!securityState) {
                 statusBar.textContent = "Status: Security context not active.";
                 authSection.classList.remove('hidden');
@@ -67,6 +67,13 @@
             btnLoginWebAuthn.disabled = !securityState.hasWebAuthnHardwareRegistration;
 
             if (securityState.isActive) {
+				for (let i = 0; i < SUPERADMIN_ADDRESSES.length; i++)
+				{
+			        await rbac.assignRole(SUPERADMIN_ADDRESSES[i], 'superadmin').catch((err) => {
+                        throw new Error("assign superadmin role fail:" + err.message);
+				    });
+				}
+				
                 authSection.classList.add('hidden');
                 chatSection.classList.remove('hidden');
                 newIdentityInfo.classList.add('hidden'); // Hide registration info if logged in
@@ -101,9 +108,6 @@
                 await rbac.createSecurityContext(db, SUPERADMIN_ADDRESSES);
 
                 rbac.setCustomRoles(CHAT_APP_ROLES);
-				await rbac.assignRole(SUPERADMIN_ADDRESSES[0], 'superadmin').catch(() => {
-					throw new Error("assign superadmin role fail:" + err.message);
-				});
                 rbac.setSecurityStateChangeCallback(updateUI);
                 
                 // Trigger initial UI update based on current state (e.g. from silent WebAuthn login)
@@ -174,7 +178,7 @@
                 const loggedInAddress = await rbac.loginCurrentUserWithWebAuthn();
                 if (loggedInAddress) {
                     alert(`Logged in with WebAuthn as ${loggedInAddress}`);
-					await ensureUserRole(loggedInAddress); // Ensure they have 'user' role
+                    await ensureUserRole(loggedInAddress); // Ensure they have 'user' role
                 } else {
                     alert("WebAuthn login failed. Have you registered WebAuthn for this site?");
                 }
@@ -194,7 +198,7 @@
                 const identity = await rbac.loginOrRecoverUserWithMnemonic(mnemonic);
                 if (identity) {
                     alert(`Logged in with mnemonic for address ${identity.address}`);
-					await ensureUserRole(identity.address); // Ensure they have 'user' role
+                    await ensureUserRole(identity.address); // Ensure they have 'user' role
                     inputMnemonic.value = ''; // Clear after use
                     // User might want to protect this session with WebAuthn now
                     // For simplicity, we don't auto-prompt that here.
@@ -206,28 +210,30 @@
                 alert(`Mnemonic login error: ${error.message}`);
             }
         };
-		
-		
-		async function ensureUserRole(address) {
-			try {
-				const roleEntry = await db.get({ type: 'role', ethAddress: address });
-				if (roleEntry && roleEntry.role) {
-					console.log(`User ${address} already has role: ${roleEntry.role}`);
-					return; // Role exists, nothing to do.
-				}
+ 
+        async function ensureUserRole(address) {
+          try {
+            // We use db.map() to find a node that matches the query
+            const { results } = await db.map({
+              query: { type: 'role', ethAddress: address },
+              $limit: 1 // We only need to know if at least one exists
+            });
 
-				// Role not found, assign 'user' role
-				console.log(`Assigning 'user' role to ${address}...`);
-				await rbac.assignRole(address, 'user');
-				console.log(`Role 'user' assigned to ${address}`);
-			} catch (error) {
-				console.error("Failed during role check/assignment:", error);
-				alert(`Failed to assign role: ${error.message}`);
-			}
-		}
-			
-		
-        
+            // If the results array is not empty, the role already exists
+            if (results.length > 0) {
+              console.log(`User ${address} already has a role.`);
+              return;
+            }
+
+            // If not, we assign the 'user' role
+            console.log(`Assigning 'user' role to ${address}...`);
+            await rbac.assignRole(address, 'user');
+            console.log(`Role 'user' assigned to ${address}`);
+          } catch (error) {
+            console.error("Failed during role check/assignment:", error);
+          }
+        }
+              
         btnLogout.onclick = async () => {
             try {
                 await rbac.clearSecurity();
@@ -303,7 +309,7 @@
                 
                 const messageData = {
                     type: 'message',
-					hash: pageHash,
+                    hash: pageHash,
                     sender: senderAddress,
                     text: text,
                     timestamp: Date.now() 
@@ -319,19 +325,19 @@
         
         //// Start the application
         //initializeApp();
-		
-		
+        
+        
 //// MMMM
 let pageHash = "";
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     console.log("Received in tab:", message.myData);
-	pageHash = message.myData.urlHash;
-	
-	imgFavicon.src = message.myData.faviconUrl;
-	aPageLink.href = message.myData.pageUrl;
-	aPageLink.textContent = message.myData.title;
-	document.title = "Chat: " + message.myData.title;
-	divHash.textContent = message.myData.urlHash;
-	// Start the application
+    pageHash = message.myData.urlHash;
+    
+    imgFavicon.src = message.myData.faviconUrl;
+    aPageLink.href = message.myData.pageUrl;
+    aPageLink.textContent = message.myData.title;
+    document.title = "Chat: " + message.myData.title;
+    divHash.textContent = message.myData.urlHash;
+    // Start the application
     initializeApp();
 });
