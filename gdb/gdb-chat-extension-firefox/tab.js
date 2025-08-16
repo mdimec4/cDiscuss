@@ -6,6 +6,7 @@
 // their generated ETH address MUST be in this list.
 // You can leave it empty and assign roles later if you build an admin UI.
 var currentUserAddress = null;
+let pageHash = "";
 
 // --- DOM Elements ---
 const authSection = document.getElementById('authSection');
@@ -76,8 +77,8 @@ btnRegisterNew.onclick = async () => {
     try {
         volatileIdentity = await rbac.startNewUserRegistration();
         if (volatileIdentity) {
-            newEthAddressElem.textContent = volatileIdentity.address;
-            newMnemonicElem.textContent = volatileIdentity.mnemonic;
+            newEthAddressElem.textContent = volatileIdentity.address; // TODO
+            newMnemonicElem.textContent = volatileIdentity.mnemonic; // TODO
             // UI update will be handled by securityStateChangeCallback
         } else {
             alert("Failed to generate new identity.");
@@ -226,7 +227,7 @@ function displayMessage({
 }
 
 btnSendMessage.onclick = async () => {
-    const text = inputMessage.value.trim();
+    const text = inputMessage.value.trim(); // TODO
     if (!text) return;
 
     try {
@@ -241,7 +242,7 @@ btnSendMessage.onclick = async () => {
             timestamp: Date.now()
         };
         await db.put(messageData);
-        inputMessage.value = ''; // Clear input field
+        inputMessage.value = ''; // Clear input field // TODO
         // Message will appear via the real-time 'map' listener
     } catch (error) {
         console.error("Failed to send message:", error);
@@ -251,8 +252,6 @@ btnSendMessage.onclick = async () => {
 
 
 
-//// MMMM
-let pageHash = "";
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.action === "popupInit") {
         if (pageHash !== "")
