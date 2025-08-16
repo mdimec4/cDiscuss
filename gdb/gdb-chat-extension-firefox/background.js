@@ -73,7 +73,7 @@
             }
 
             pageHashToReferenceCountedUnsubscribe.forEach((key, val, map) => {
-              loadMessages(val);
+              loadMessages(key, val);
             });
 
         } else {
@@ -91,10 +91,10 @@
     // --- INITIALIZATION ---
     async function initializeApp() {
         try {
-            // TODO statusBar.textContent = "Status: Initializing DB...";
+            statusBarUISet("Status: Initializing DB...");
             db = new GDB("cDiscuss-DB");
 
-            // TODO statusBar.textContent = "Status: DB Ready. Initializing Security Context...";
+             statusBarUISet("Status: DB Ready. Initializing Security Context...");
 
             await rbac.createSecurityContext(db, SUPERADMIN_ADDRESSES);
 
@@ -120,12 +120,17 @@
             }
         } catch (error) {
             console.error("Initialization failed:", error);
-            //TODO statusBar.textContent = `Error: ${error.message}`;
+             statusBarUISet(`Error: ${error.message}`);
             alert(`Initialization Error: ${error.message}`);
         }
     }
 
-
+    function statusBarUISet(text)
+    {
+      chrome.runtime.sendMessage({
+            action "statusBarUISet",
+            text: text
+    }
 
     function displayMessage({
         id,
@@ -138,10 +143,18 @@
         });
     }
 
-    async function loadMessages(unsubscribeObject) {
+    function clearMessagesContainer(pageHash)
+    {
+        chrome.runtime.sendMessage({
+            action "clearMessagesContainer",
+            hash: pageHash
+        });
+    }
+
+    async function loadMessages(pageHash, unsubscribeObject) {
         if (unsubscribeObject.unsubscribe !== null || unsubscribeObject.referenceCount < 1)
             return;
-        // TODO messagesContainer.innerHTML = ''; // Clear previous messages
+        clearMessagesContainer(pageHash);
 
         try {
             const {
@@ -186,7 +199,7 @@
 
                 if (pageHashToReferenceCountedUnsubscribe.has(pageHash)) {
                     const unsubscribeObject = pageHashToReferenceCountedUnsubscribe[pageHash];
-                    loadMessages(unsubscribeObject);
+                    loadMessages(pageHash, unsubscribeObject);
                 }
 
             } else
@@ -242,6 +255,7 @@
             const pageHash = extensionTabIdToPageHash[tabId];
             extensionTabIdToPageHash.delete(tabId)
             unreferenceSubscription(pageHash);
+            
             cleanupIfNoExtensionTabs();
         }
 
@@ -249,12 +263,7 @@
 
     function cleanupIfNoExtensionTabs() {
         if (extensionTabIdToPageHash.size === 0) {
-
             forceRemoveAllSubscriptions();
-
-            //console.log("All extension tabs closed, cleaning up RBAC session...");
-            //rbac.clearSecurity().catch(console.error);
-            // You can also reset in-memory variables here
         }
     }
 

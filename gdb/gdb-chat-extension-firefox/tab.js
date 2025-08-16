@@ -282,4 +282,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     {
       displayMessage(message.myData.id, message.myData.value, message.myData.action);
     }
+    else if (message.action === "statusBarUISet")
+    {
+      statusBar.textContent = message.text;
+    }
+    else if (message.action ==="clearMessagesContainer" && message.hash === pageHash)
+    {
+      messagesContainer.innerHTML = ''; // Clear previous messages
+    }
 });
