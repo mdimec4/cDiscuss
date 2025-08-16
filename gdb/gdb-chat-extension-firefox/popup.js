@@ -22,7 +22,7 @@ chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) {
                              chrome.tabs.onUpdated.addListener(function listener(tabId, changeInfo) {
                                 if (tabId === newTab.id && changeInfo.status === 'complete') {
                                     // Send message directly to content script in new tab
-                                    chrome.runtime.sendMessage({ tabId: tab.id, myData: { pageUrl: tab.url, urlHash: hash, title: tab.title, faviconUrl:  tab.favIconUrl} });
+                                    chrome.runtime.sendMessage({ tabId: tab.id, action "popupInit", myData: { pageUrl: tab.url, urlHash: hash, title: tab.title, faviconUrl:  tab.favIconUrl, newExtensionTabId: newTab.id} });
                                     chrome.tabs.onUpdated.removeListener(listener);
                                 }
                              });

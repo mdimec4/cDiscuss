@@ -1,9 +1,6 @@
 // Wait for rbac and GDB to be on window (or directly use imported vars)
         // For simplicity, assuming they are loaded as the script tag is type="module" and imports are processed first.
 
-        import { GDB } from "/vendor/gdb.min.js"; // Adjust path according to your structure
-        import * as rbac from '/vendor/rbac.min.js'; // Adjust path according to your structure
-
         // --- CONFIGURATION ---
         // IMPORTANT: For a user to be superadmin on first registration,
         // their generated ETH address MUST be in this list.
@@ -34,19 +31,6 @@
         const aPageLink = document.getElementById('aPageLink');
         const divHash  = document.getElementById('divHash');
 
-        // --- APP STATE ---
-        let db;
-        let volatileIdentity = null; // To store { address, mnemonic, privateKey } temporarily
-        let unsubscribeMessages = null;
-        let currentUserAddress = null;
-
-        // --- RBAC Custom Roles ---
-        const CHAT_APP_ROLES = {
-          superadmin: { can: ["assignRole", "deleteAnyMessage", "write"], inherits: ["admin"] }, // Example
-          admin: { can: ["deleteMessage"], inherits: ["user"] }, // Example
-          user: { can: ["write", "readSelf"], inherits: ["guest"] }, // "write" allows sending messages
-          guest: { can: ["read", "write", "sync"] }, // Default, can read public messages
-        };
 
         // --- UI UPDATE LOGIC ---
         async function updateUI(securityState) {
@@ -330,14 +314,26 @@
 //// MMMM
 let pageHash = "";
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-    console.log("Received in tab:", message.myData);
-    pageHash = message.myData.urlHash;
-    
-    imgFavicon.src = message.myData.faviconUrl;
-    aPageLink.href = message.myData.pageUrl;
-    aPageLink.textContent = message.myData.title;
-    document.title = "Chat: " + message.myData.title;
-    divHash.textContent = message.myData.urlHash;
-    // Start the application
-    initializeApp();
+    if (message.action === "popupInit")
+    {
+      if (pageHash !== "")
+        return;
+      
+      console.log("Received in tab:", message.myData);
+      pageHash = message.myData.urlHash;
+      
+      imgFavicon.src = message.myData.faviconUrl;
+      aPageLink.href = message.myData.pageUrl;
+      aPageLink.textContent = message.myData.title;
+      document.title = "Chat: " + message.myData.title;
+      divHash.textContent = message.myData.urlHash;
+
+      // inform background
+      const messageClone = structuredClone(message);
+      messageClone.action = "extensionTabInit";
+      chrome.runtime.sendMessage(messageClone);
+    }
+    else if (message.action === 'showAlert') {
+        alert(message.message);  // Simple, replace with custom modal/toast if needed.
+    }
 });
