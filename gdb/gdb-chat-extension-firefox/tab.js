@@ -34,7 +34,7 @@ const divHash = document.getElementById('divHash');
 
 
 // --- UI UPDATE LOGIC ---
-async function updateUI(securityState) {
+function updateUI(securityState) {
     if (!securityState) {
         statusBar.textContent = "Status: Security context not active.";
         authSection.classList.remove('hidden');
