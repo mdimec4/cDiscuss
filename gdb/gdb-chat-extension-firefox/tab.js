@@ -55,14 +55,9 @@ async function updateUI(securityState) {
         authSection.classList.add('hidden');
         chatSection.classList.remove('hidden');
         newIdentityInfo.classList.add('hidden'); // Hide registration info if logged in
-        loadMessages();
     } else {
         authSection.classList.remove('hidden');
         chatSection.classList.add('hidden');
-        if (unsubscribeMessages) {
-            unsubscribeMessages();
-            unsubscribeMessages = null;
-        }
         messagesContainer.innerHTML = ''; // Clear messages on logout
     }
 

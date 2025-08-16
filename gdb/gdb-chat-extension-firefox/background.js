@@ -55,25 +55,15 @@
 
 
     async function updateState(securityState) {
-        if (!securityState) {
+        updateUICall(securityState);
 
-            /* TODO
-                    statusBar.textContent = "Status: Security context not active.";
-                    authSection.classList.remove('hidden');
-                    chatSection.classList.add('hidden');
-            */
+        if (!securityState) {
             currentUserAddress = null;
             return;
         }
 
         currentUserAddress = securityState.activeAddress;
-        /* TODO
-        let statusText = `Status: ${securityState.isActive ? `Logged in as ${securityState.activeAddress.substring(0,10)}...` : 'Logged out.'}`;
-        statusText += ` | WebAuthn Active: ${securityState.isWebAuthnProtected}`;
-        statusText += ` | WebAuthn Registered Here: ${securityState.hasWebAuthnHardwareRegistration}`;*/
-        // TODO statusBar.textContent = statusText;
 
-        // TODO btnLoginWebAuthn.disabled = !securityState.hasWebAuthnHardwareRegistration;
 
         if (securityState.isActive) {
             for (let i = 0; i < SUPERADMIN_ADDRESSES.length; i++) {
@@ -82,35 +72,16 @@
                 });
             }
 
-            /* TODO authSection.classList.add('hidden');
-                chatSection.classList.remove('hidden');
-                newIdentityInfo.classList.add('hidden'); // Hide registration info if logged in
-         */
             pageHashToReferenceCountedUnsubscribe.forEach((key, val, map) => {
               loadMessages(val);
             });
 
         } else {
-            /* TODO
-            authSection.classList.remove('hidden');
-            chatSection.classList.add('hidden');
-            */
             forceRemoveAllSubscriptions();
-            // TODO messagesContainer.innerHTML = ''; // Clear messages on logout
         }
-
-        /* TODO if (securityState.hasVolatileIdentity) {
-             newIdentityInfo.classList.remove('hidden');
-             btnRegisterNew.disabled = true;
-         } else {
-             newIdentityInfo.classList.add('hidden');
-             btnRegisterNew.disabled = false;
-         }
-         */
-        updateUICall(securityState);
     }
 
-    async function updateUICall(securityState) {
+    function updateUICall(securityState) {
         chrome.runtime.sendMessage({
             action "updateUI",
             securityState: securityState
@@ -194,10 +165,6 @@
 
     chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         if (message.action === "extensionTabInit") {
-            let initNeeded = extensionTabIdToPageHash.size === 0;
-            /*TODO if (pageHash !== "")
-              return;*/
-
             console.log("Received in tab:", message.myData);
             const pageHash = message.myData.urlHash;
             const newExtensionTabId = msessage.myData.newExtensionTabId;
