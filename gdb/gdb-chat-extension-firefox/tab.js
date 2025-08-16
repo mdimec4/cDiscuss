@@ -74,19 +74,10 @@ function updateUI(securityState) {
 
 // --- IDENTITY MANAGEMENT HANDLERS ---
 btnRegisterNew.onclick = async () => {
-    try {
-        volatileIdentity = await rbac.startNewUserRegistration();
-        if (volatileIdentity) {
-            newEthAddressElem.textContent = volatileIdentity.address; // TODO
-            newMnemonicElem.textContent = volatileIdentity.mnemonic; // TODO
-            // UI update will be handled by securityStateChangeCallback
-        } else {
-            alert("Failed to generate new identity.");
-        }
-    } catch (error) {
-        console.error("Registration error:", error);
-        alert(`Registration error: ${error.message}`);
-    }
+        chrome.runtime.sendMessage({action: "registerNew"}, (response) => {
+            newEthAddressElem.textContent = response.address;
+            newMnemonicElem.textContent = response.mnemonic;
+        });
 };
 
 btnProtectWebAuthn.onclick = async () => {
