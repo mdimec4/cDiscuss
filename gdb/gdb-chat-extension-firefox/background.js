@@ -67,9 +67,10 @@
         }
 
         currentUserAddress = securityState.activeAddress;
+        /* TODO
         let statusText = `Status: ${securityState.isActive ? `Logged in as ${securityState.activeAddress.substring(0,10)}...` : 'Logged out.'}`;
         statusText += ` | WebAuthn Active: ${securityState.isWebAuthnProtected}`;
-        statusText += ` | WebAuthn Registered Here: ${securityState.hasWebAuthnHardwareRegistration}`;
+        statusText += ` | WebAuthn Registered Here: ${securityState.hasWebAuthnHardwareRegistration}`;*/
         // TODO statusBar.textContent = statusText;
 
         // TODO btnLoginWebAuthn.disabled = !securityState.hasWebAuthnHardwareRegistration;
@@ -85,17 +86,16 @@
                 chatSection.classList.remove('hidden');
                 newIdentityInfo.classList.add('hidden'); // Hide registration info if logged in
          */
-            loadMessages(); // TODO
+            pageHashToReferenceCountedUnsubscribe.forEach((key, val, map) => {
+              loadMessages(val);
+            });
 
         } else {
             /* TODO
             authSection.classList.remove('hidden');
             chatSection.classList.add('hidden');
             */
-            if (unsubscribeMessages) {
-                unsubscribeMessages(); // TODO
-                unsubscribeMessages = null;
-            }
+            forceRemoveAllSubscriptions();
             // TODO messagesContainer.innerHTML = ''; // Clear messages on logout
         }
 
@@ -107,6 +107,14 @@
              btnRegisterNew.disabled = false;
          }
          */
+        updateUICall(securityState);
+    }
+
+    async function updateUICall(securityState) {
+        chrome.runtime.sendMessage({
+            action "updateUI",
+            securityState: securityState
+        });
     }
 
     // --- INITIALIZATION ---
@@ -139,59 +147,29 @@
                 console.log("Attempting silent WebAuthn login...");
                 await rbac.loginCurrentUserWithWebAuthn().catch(err => console.warn("Silent WebAuthn login failed or no registration:", err.message));
             }
-
-
         } catch (error) {
             console.error("Initialization failed:", error);
-            statusBar.textContent = `Error: ${error.message}`;
+            //TODO statusBar.textContent = `Error: ${error.message}`;
             alert(`Initialization Error: ${error.message}`);
         }
     }
 
 
 
-        function displayMessage({ id, value, action }) {
-          /* TODO inform tab
-            if (action === 'removed') {
-                const msgElement = document.getElementById(`msg-${id}`);
-                if (msgElement) msgElement.remove();
-                return;
-            }
-            if (!value || value.type !== 'message') return; // Only process message type nodes
+    function displayMessage({
+        id,
+        value,
+        action
+    }) {
+        chrome.runtime.sendMessage({
+            action "displayMessage",
+            myData: {id: id, value: value, action: action}
+        });
+    }
 
-            let msgElement = document.getElementById(`msg-${id}`);
-            if (action === 'updated' && !msgElement) return; // Should not happen if initial/added handled
-            
-            if (!msgElement) { // 'initial' or 'added'
-                msgElement = document.createElement('div');
-                msgElement.id = `msg-${id}`;
-                msgElement.classList.add('message');
-                messagesContainer.appendChild(msgElement);
-            }
-            
-            msgElement.classList.toggle('own', value.sender === currentUserAddress);
-            msgElement.classList.toggle('other', value.sender !== currentUserAddress);
-            
-            const senderShort = value.sender ? `${value.sender.substring(0, 6)}...${value.sender.substring(value.sender.length - 4)}` : 'Unknown';
-            const messageDate = value.timestamp ? new Date(value.timestamp).toLocaleString() : 'No timestamp';
-
-            msgElement.innerHTML = `
-                <span class="sender">${value.sender === currentUserAddress ? 'You' : senderShort}</span>
-                <span class="text">${value.text}</span>
-                <span class="timestamp">${messageDate}</span>
-            `;
-            
-            // Scroll to bottom for new messages
-            if (action === 'added' || action === 'initial') {
-                 messagesContainer.scrollTop = messagesContainer.scrollHeight;
-            }
-            */
-        }
-
-    async function loadMessages() {
-        if (unsubscribeMessages) {
-            unsubscribeMessages(); // Unsubscribe from previous listener if any
-        }
+    async function loadMessages(unsubscribeObject) {
+        if (unsubscribeObject.unsubscribe !== null || unsubscribeObject.referenceCount < 1)
+            return;
         // TODO messagesContainer.innerHTML = ''; // Clear previous messages
 
         try {
@@ -207,17 +185,13 @@
                 },
                 displayMessage // ({ id, value, action, edges, timestamp })
             );
-            unsubscribeMessages = unsubscribe;
+            unsubscribeObject.unsubscribe = unsubscribe;
         } catch (error) {
             console.error("Failed to load messages:", error);
             alert(`Failed to load messages: ${error.message}`);
         }
     }
 
-
-
-
-    // TODO let pageHash = "";
     chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         if (message.action === "extensionTabInit") {
             let initNeeded = extensionTabIdToPageHash.size === 0;
@@ -229,30 +203,68 @@
             const newExtensionTabId = msessage.myData.newExtensionTabId;
             extensionTabIdToPageHash[newExtensionTabId] = pageHash;
 
+            referenceSubscription(pageHash);
+
             // Start the application
-            if (initNeeded)
+            if (rbac.isSecurityActive()) {
+                const initialState = {
+                    isActive: rbac.isSecurityActive(),
+                    activeAddress: rbac.getActiveEthAddress(),
+                    isWebAuthnProtected: rbac.isCurrentSessionProtectedByWebAuthn(),
+                    hasVolatileIdentity: !!rbac.getMnemonicForDisplayAfterRegistrationOrRecovery(), // Heuristic
+                    hasWebAuthnHardwareRegistration: rbac.hasExistingWebAuthnRegistration()
+                };
+
+                updateUICall(initialState);
+
+                if (pageHashToReferenceCountedUnsubscribe.has(pageHash)) {
+                    const unsubscribeObject = pageHashToReferenceCountedUnsubscribe[pageHash];
+                    loadMessages(unsubscribeObject);
+                }
+
+            } else
                 initializeApp();
-            else
-                nop(); //TODO  create/reference subscription
+
         }
     });
 
-    function unreferenceSubscription(pageHash)
-    {
-      if (!pageHashToReferenceCountedUnsubscribe.has(pageHash))
-          return;
+
+    function referenceSubscription(pageHash) {
+        let unsubscribeObject = null;
+        if (!pageHashToReferenceCountedUnsubscribe.has(pageHash)) {
+            unsubscribeObject = pageHashToReferenceCountedUnsubscribe[pageHash]
+            unsubscribeObject.referenceCount++;
+        } else {
+            unsubscribeObject = {
+                referenceCount: 1,
+                unsubscribe: null
+            }
+            pageHashToReferenceCountedUnsubscribe[pageHash] = unsubscribeObject;
+        }
+
+    }
+
+
+    function unreferenceSubscription(pageHash) {
+        if (!pageHashToReferenceCountedUnsubscribe.has(pageHash))
+            return;
         const unsubscribeObj = pageHashToReferenceCountedUnsubscribe[pageHash];
         unsubscribeObject.referenceCount--;
+
         if (unsubscribeObject.referenceCount > 0)
-          return;
-        unsubscribeObject.unsubscribe();
+            return;
+
+        if (unsubscribeObject.unsubscribe)
+            unsubscribeObject.unsubscribe();
         pageHashToReferenceCountedUnsubscribe.delete(pageHash);
     }
-    
+
     function forceRemoveAllSubscriptions() {
         pageHashToReferenceCountedUnsubscribe.forEach((key, val, map) => {
             val.referenceCount = 0;
-            val.unsubscribe();
+
+            if (val.unsubscribe)
+                val.unsubscribe();
         });
         pageHashToReferenceCountedUnsubscribe.clear();
     }
@@ -272,9 +284,9 @@
         if (extensionTabIdToPageHash.size === 0) {
 
             forceRemoveAllSubscriptions();
-            
-            console.log("All extension tabs closed, cleaning up RBAC session...");
-            rbac.clearSecurity().catch(console.error);
+
+            //console.log("All extension tabs closed, cleaning up RBAC session...");
+            //rbac.clearSecurity().catch(console.error);
             // You can also reset in-memory variables here
         }
     }
