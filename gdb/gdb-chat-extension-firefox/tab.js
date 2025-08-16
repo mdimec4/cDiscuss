@@ -74,45 +74,24 @@ function updateUI(securityState) {
 
 // --- IDENTITY MANAGEMENT HANDLERS ---
 btnRegisterNew.onclick = async () => {
-        chrome.runtime.sendMessage({action: "registerNew"}, (response) => {
-            newEthAddressElem.textContent = response.address;
-            newMnemonicElem.textContent = response.mnemonic;
-        });
+    chrome.runtime.sendMessage({
+        action: "registerNew"
+    }, (response) => {
+        newEthAddressElem.textContent = response.address;
+        newMnemonicElem.textContent = response.mnemonic;
+    });
 };
 
 btnProtectWebAuthn.onclick = async () => {
-    if (!volatileIdentity || !volatileIdentity.privateKey) {
-        alert("No volatile identity (private key) available to protect. Please generate one first.");
-        return;
-    }
-    try {
-        const protectedAddress = await rbac.protectCurrentIdentityWithWebAuthn(volatileIdentity.privateKey);
-        if (protectedAddress) {
-            alert(`Identity ${protectedAddress} protected with WebAuthn and you are now logged in!`);
-            volatileIdentity = null; // Clear volatile identity once protected
-            // UI update via callback
-        } else {
-            alert("WebAuthn protection failed. Ensure your browser supports it, you are on HTTPS/localhost, and you completed the WebAuthn prompt.");
-        }
-    } catch (error) {
-        console.error("WebAuthn protection error:", error);
-        alert(`WebAuthn protection error: ${error.message}`);
-    }
+    chrome.runtime.sendMessage({
+        action: "protectWebAuthn"
+    });
 };
 
 btnLoginWebAuthn.onclick = async () => {
-    try {
-        const loggedInAddress = await rbac.loginCurrentUserWithWebAuthn();
-        if (loggedInAddress) {
-            alert(`Logged in with WebAuthn as ${loggedInAddress}`);
-            await ensureUserRole(loggedInAddress); // Ensure they have 'user' role
-        } else {
-            alert("WebAuthn login failed. Have you registered WebAuthn for this site?");
-        }
-    } catch (error) {
-        console.error("WebAuthn login error:", error);
-        alert(`WebAuthn login error: ${error.message}`);
-    }
+    chrome.runtime.sendMessage({
+        action: "loginWebAuthn"
+    });
 };
 
 btnLoginMnemonic.onclick = async () => {
@@ -121,59 +100,19 @@ btnLoginMnemonic.onclick = async () => {
         alert("Please enter your mnemonic phrase.");
         return;
     }
-    try {
-        const identity = await rbac.loginOrRecoverUserWithMnemonic(mnemonic);
-        if (identity) {
-            alert(`Logged in with mnemonic for address ${identity.address}`);
-            await ensureUserRole(identity.address); // Ensure they have 'user' role
-            inputMnemonic.value = ''; // Clear after use
-            // User might want to protect this session with WebAuthn now
-            // For simplicity, we don't auto-prompt that here.
-        } else {
-            alert("Failed to login with mnemonic. Please check the phrase.");
-        }
-    } catch (error) {
-        console.error("Mnemonic login error:", error);
-        alert(`Mnemonic login error: ${error.message}`);
-    }
+
+    chrome.runtime.sendMessage({
+        action: "loginMnemonic",
+        mnemonic: mnemonic
+    }, (response) => {
+        inputMnemonic.value = response.mnemonic;
+    });
 };
 
-async function ensureUserRole(address) {
-    try {
-        // We use db.map() to find a node that matches the query
-        const {
-            results
-        } = await db.map({
-            query: {
-                type: 'role',
-                ethAddress: address
-            },
-            $limit: 1 // We only need to know if at least one exists
-        });
-
-        // If the results array is not empty, the role already exists
-        if (results.length > 0) {
-            console.log(`User ${address} already has a role.`);
-            return;
-        }
-
-        // If not, we assign the 'user' role
-        console.log(`Assigning 'user' role to ${address}...`);
-        await rbac.assignRole(address, 'user');
-        console.log(`Role 'user' assigned to ${address}`);
-    } catch (error) {
-        console.error("Failed during role check/assignment:", error);
-    }
-}
-
 btnLogout.onclick = async () => {
-    try {
-        await rbac.clearSecurity();
-        alert("You have been logged out.");
-    } catch (error) {
-        console.error("Logout error:", error);
-        alert(`Logout error: ${error.message}`);
-    }
+    chrome.runtime.sendMessage({
+        action: "logout"
+    });
 };
 
 // --- CHAT FUNCTIONALITY ---
@@ -221,24 +160,13 @@ btnSendMessage.onclick = async () => {
     const text = inputMessage.value.trim(); // TODO
     if (!text) return;
 
-    try {
-        // Check permission to send message (defined as 'write' in custom roles)
-        const senderAddress = await rbac.executeWithPermission('write');
-
-        const messageData = {
-            type: 'message',
-            hash: pageHash,
-            sender: senderAddress,
-            text: text,
-            timestamp: Date.now()
-        };
-        await db.put(messageData);
-        inputMessage.value = ''; // Clear input field // TODO
-        // Message will appear via the real-time 'map' listener
-    } catch (error) {
-        console.error("Failed to send message:", error);
-        alert(`Failed to send message: ${error.message}. Do you have 'write' permission?`);
-    }
+    chrome.runtime.sendMessage({
+        action: "sendMessage",
+        hash: pageHash,
+        text: text
+    }, (response) => {
+        inputMessage.value = response.text;
+    });
 };
 
 
@@ -263,21 +191,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         chrome.runtime.sendMessage(messageClone);
     } else if (message.action === "showAlert") {
         alert(message.message); // Simple, replace with custom modal/toast if needed.
-    }
-    else if (message.action === "updateUI")
-    {
-      updateUI(message.securityState);
-    }
-    else if (message.action === "displayMessage" && message.myData.value.hash === pageHash)
-    {
-      displayMessage(message.myData.id, message.myData.value, message.myData.action);
-    }
-    else if (message.action === "statusBarUISet")
-    {
-      statusBar.textContent = message.text;
-    }
-    else if (message.action ==="clearMessagesContainer" && message.hash === pageHash)
-    {
-      messagesContainer.innerHTML = ''; // Clear previous messages
+    } else if (message.action === "updateUI") {
+        updateUI(message.securityState);
+    } else if (message.action === "displayMessage" && message.myData.value.hash === pageHash) {
+        displayMessage(message.myData.id, message.myData.value, message.myData.action);
+    } else if (message.action === "statusBarUISet") {
+        statusBar.textContent = message.text;
+    } else if (message.action === "clearMessagesContainer" && message.hash === pageHash) {
+        messagesContainer.innerHTML = ''; // Clear previous messages
     }
 });

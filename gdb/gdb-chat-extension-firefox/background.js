@@ -73,10 +73,9 @@
                     }
 
                     pageHashToReferenceCountedUnsubscribe.forEach((key, val, map) => {
-                        if (val.unsubscribe)
-                        { // Unsubscribe from previous listener if any
-                          val.unsubscribe();
-                          val.unsubscribe = null;
+                        if (val.unsubscribe) { // Unsubscribe from previous listener if any
+                            val.unsubscribe();
+                            val.unsubscribe = null;
                         }
                         loadMessages(key, val);
                     });
@@ -95,12 +94,14 @@
 
 
             // --- IDENTITY MANAGEMENT HANDLERS ---
-            async function registerNew(sendResponse)
-            {
+            async function registerNew(sendResponse) {
                 try {
                     volatileIdentity = await rbac.startNewUserRegistration();
                     if (volatileIdentity) {
-                        sendResponse({address: volatileIdentity.address, mnemonic: volatileIdentity.mnemonic});
+                        sendResponse({
+                            address: volatileIdentity.address,
+                            mnemonic: volatileIdentity.mnemonic
+                        });
                         // UI update will be handled by securityStateChangeCallback
                     } else {
                         alert("Failed to generate new identity.");
@@ -111,7 +112,7 @@
                 }
             };
 
-            btnProtectWebAuthn.onclick = async () => {
+            async function protectWebAuthn() {
                 if (!volatileIdentity || !volatileIdentity.privateKey) {
                     alert("No volatile identity (private key) available to protect. Please generate one first.");
                     return;
@@ -131,7 +132,7 @@
                 }
             };
 
-            btnLoginWebAuthn.onclick = async () => {
+            async function loginWebAuthn() {
                 try {
                     const loggedInAddress = await rbac.loginCurrentUserWithWebAuthn();
                     if (loggedInAddress) {
@@ -146,18 +147,15 @@
                 }
             };
 
-            btnLoginMnemonic.onclick = async () => {
-                const mnemonic = inputMnemonic.value.trim();
-                if (!mnemonic) {
-                    alert("Please enter your mnemonic phrase.");
-                    return;
-                }
+            async function loginMnemonic(mnemonic, sendResponse) {
                 try {
                     const identity = await rbac.loginOrRecoverUserWithMnemonic(mnemonic);
                     if (identity) {
                         alert(`Logged in with mnemonic for address ${identity.address}`);
                         await ensureUserRole(identity.address); // Ensure they have 'user' role
-                        inputMnemonic.value = ''; // Clear after use
+                        sendResponse({
+                            mnemonic: ""
+                        }); // Clear after use
                         // User might want to protect this session with WebAuthn now
                         // For simplicity, we don't auto-prompt that here.
                     } else {
@@ -197,7 +195,7 @@
                 }
             }
 
-            btnLogout.onclick = async () => {
+            async function logout() {
                 try {
                     await rbac.clearSecurity();
                     alert("You have been logged out.");
@@ -207,7 +205,30 @@
                 }
             };
 
+            async function sendMessage(pageHash, text, sendResponse) {
+                if (!text || !pageHash) return;
 
+                try {
+                    // Check permission to send message (defined as 'write' in custom roles)
+                    const senderAddress = await rbac.executeWithPermission('write');
+
+                    const messageData = {
+                        type: 'message',
+                        hash: pageHash,
+                        sender: senderAddress,
+                        text: text,
+                        timestamp: Date.now()
+                    };
+                    await db.put(messageData);
+                    sendResponse({
+                        text: ""
+                    });
+                    // Message will appear via the real-time 'map' listener
+                } catch (error) {
+                    console.error("Failed to send message:", error);
+                    alert(`Failed to send message: ${error.message}. Do you have 'write' permission?`);
+                }
+            };
 
             // --- INITIALIZATION ---
             async function initializeApp() {
@@ -328,10 +349,18 @@
                             } else
                                 initializeApp();
 
-                        }
-                        else if (message.action === "registerNew")
-                        {
-                          registerNew(sendResponse);
+                        } else if (message.action === "registerNew") {
+                            registerNew(sendResponse);
+                        } else if (message.action === "protectWebAuthn") {
+                            protectWebAuthn();
+                        } else if (message.action === "loginWebAuthn") {
+                            loginWebAuthn();
+                        } else if (message.action === "loginMnemonic") {
+                            loginMnemonic(message.mnemonic, sendResponse);
+                        } else if (message.action === "logout") {
+                            logout();
+                        } else if (message.action === "sendMessage") {
+                            sendMessage(message.hash, message.text, sendResponse);
                         }
                     });
 
@@ -379,8 +408,7 @@
                     function forceUnsubscribeAll() {
                         pageHashToReferenceCountedUnsubscribe.forEach((key, val, map) => {
 
-                            if (val.unsubscribe)
-                            {
+                            if (val.unsubscribe) {
                                 val.unsubscribe();
                                 val.uunsubscribe = null;
                             }
