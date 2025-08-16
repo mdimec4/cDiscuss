@@ -120,7 +120,7 @@
             await rbac.createSecurityContext(db, SUPERADMIN_ADDRESSES);
 
             rbac.setCustomRoles(CHAT_APP_ROLES);
-            rbac.setSecurityStateChangeCallback(updateState);
+            rbac.setSecurityStateChangeCallback(initialState);
 
             // Trigger initial UI update based on current state (e.g. from silent WebAuthn login)
             // The callback itself will be called by createSecurityContext, but to be safe:
