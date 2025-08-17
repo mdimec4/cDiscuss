@@ -77,6 +77,11 @@ btnRegisterNew.onclick = async () => {
     chrome.runtime.sendMessage({
         action: "registerNew"
     }, (response) => {
+        if (!!response) return;
+        if (response.error) {
+            alert(response.error);
+            return;
+        }
         newEthAddressElem.textContent = response.address;
         newMnemonicElem.textContent = response.mnemonic;
     });
@@ -85,12 +90,24 @@ btnRegisterNew.onclick = async () => {
 btnProtectWebAuthn.onclick = async () => {
     chrome.runtime.sendMessage({
         action: "protectWebAuthn"
+    }, (response) => {
+        if (!!response) retuern;
+        if (response.message)
+            alert(response.message);
+        else if (response.error)
+            alert(response.error);
     });
 };
 
 btnLoginWebAuthn.onclick = async () => {
     chrome.runtime.sendMessage({
         action: "loginWebAuthn"
+    }, (response) => {
+        if (!!response) retuern;
+        if (response.message)
+            alert(response.message);
+        if (response.error)
+            alert(response.error);
     });
 };
 
@@ -105,13 +122,25 @@ btnLoginMnemonic.onclick = async () => {
         action: "loginMnemonic",
         mnemonic: mnemonic
     }, (response) => {
-        inputMnemonic.value = response.mnemonic;
+        if (!!response) return;
+        if (response.message)
+            alert(response.message);
+        if (response.error)
+            alert(response.error);
+        if (response.mnemonic)
+            inputMnemonic.value = response.mnemonic;
     });
 };
 
 btnLogout.onclick = async () => {
     chrome.runtime.sendMessage({
         action: "logout"
+    }, (response) => {
+        if (!!response) retuern;
+        if (response.message)
+            alert(response.message);
+        if (response.error)
+            alert(response.error);
     });
 };
 
@@ -165,6 +194,11 @@ btnSendMessage.onclick = async () => {
         hash: pageHash,
         text: text
     }, (response) => {
+        if (!!response) return;
+        if (response.error) {
+            alert(response.error);
+            return;
+        }
         inputMessage.value = response.text;
     });
 };
@@ -188,7 +222,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         // inform background
         const messageClone = structuredClone(message);
         messageClone.action = "extensionTabInit";
-        chrome.runtime.sendMessage(messageClone);
+        chrome.runtime.sendMessage(messageClone, (rerspons) => {
+            if (response && response.error) {
+                alert(response.error);
+            }
+        });
     } else if (message.action === "showAlert") {
         alert(message.message); // Simple, replace with custom modal/toast if needed.
     } else if (message.action === "updateUI") {
