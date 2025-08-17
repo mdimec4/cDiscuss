@@ -222,7 +222,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         // inform background
         const messageClone = structuredClone(message);
         messageClone.action = "extensionTabInit";
-        chrome.runtime.sendMessage(messageClone, (rerspons) => {
+        chrome.runtime.sendMessage(messageClone, (response) => {
             if (response && response.error) {
                 alert(response.error);
             }
