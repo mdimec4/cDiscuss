@@ -66,10 +66,10 @@
             }
 
             pageHashToReferenceCountedUnsubscribe.forEach((val, key, map) => {
-                if (val.unsubscribe) { // Unsubscribe from previous listener if any
+                /*if (val.unsubscribe) { // Unsubscribe from previous listener if any
                     val.unsubscribe();
                     val.unsubscribe = null;
-                }
+                }*/
                 loadMessages(key, val, false);
             });
 
@@ -203,7 +203,9 @@
 
             // If not, we assign the 'user' role
             console.log(`Assigning 'user' role to ${address}...`);
-            await rbac.assignRole(address, 'user');
+            await rbac.assignRole(address, 'user').catch((err) => {
+                    throw new Error("assign user role fail:" + err.message);
+                });;
             console.log(`Role 'user' assigned to ${address}`);
         } catch (error) {
             console.error("Failed during role check/assignment:", error);
@@ -258,9 +260,11 @@
 
             statusBarUISet("Status: DB Ready. Initializing Security Context...");
 
+
             await rbac.createSecurityContext(db, SUPERADMIN_ADDRESSES);
 
             rbac.setCustomRoles(CHAT_APP_ROLES);
+
             rbac.setSecurityStateChangeCallback(updateState);
 
             // Trigger initial UI update based on current state (e.g. from silent WebAuthn login)
@@ -363,6 +367,10 @@
 
                 if (pageHashToReferenceCountedUnsubscribe.has(pageHash)) {
                     const unsubscribeObject = pageHashToReferenceCountedUnsubscribe.get(pageHash);
+                    if (unsubscribeObject.unsubscribe) { // Unsubscribe from previous listener if any. This way all tabs for the same page will have all messages re-renderd.
+                        unsubscribeObject.unsubscribe();
+                        unsubscribeObject.unsubscribe = null;
+                    }
                     await loadMessages(pageHash, unsubscribeObject, true);
                 }
 
