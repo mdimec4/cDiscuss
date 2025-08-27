@@ -2,466 +2,482 @@
 
 (async () => {
 
-            self.alert = (message) => {
-                chrome.runtime.sendMessage({
-                    action: 'showAlert',
-                    message
-                });
-            };
+    self.alert = (message) => {
+        chrome.runtime.sendMessage({
+            action: 'showAlert',
+            message
+        });
+    };
 
-            const GDB = await import("/vendor/gdb.min.js");
-            const rbac = await import("/vendor/rbac.min.js");
-            // --- CONFIGURATION ---
-            // IMPORTANT: For a user to be superadmin on first registration,
-            // their generated ETH address MUST be in this list.
-            // You can leave it empty and assign roles later if you build an admin UI.
-            const SUPERADMIN_ADDRESSES = ["0x0707eeB901d6c78bD0b3b31C2C6F5E00DF8f26Dd"]; // Replace or add your desired superadmin ETH address(es)
-
-
-            // --- APP STATE ---
-            let db;
-            let volatileIdentity = null; // To store { address, mnemonic, privateKey } temporarily
-            let unsubscribeMessages = null;
-            let currentUserAddress = null;
-
-            const extensionTabIdToPageHash = new Map();
-            const pageHashToReferenceCountedUnsubscribe = new Map();
-
-            // --- RBAC Custom Roles ---
-            const CHAT_APP_ROLES = {
-                superadmin: {
-                    can: ["assignRole", "deleteAnyMessage", "write"],
-                    inherits: ["admin"]
-                }, // Example
-                admin: {
-                    can: ["deleteMessage"],
-                    inherits: ["user"]
-                }, // Example
-                user: {
-                    can: ["write", "readSelf"],
-                    inherits: ["guest"]
-                }, // "write" allows sending messages
-                guest: {
-                    can: ["read", "write", "sync"]
-                }, // Default, can read public messages
-            };
+    const GDB = await import("/vendor/gdb.min.js");
+    const rbac = await import("/vendor/rbac.min.js");
+    // --- CONFIGURATION ---
+    // IMPORTANT: For a user to be superadmin on first registration,
+    // their generated ETH address MUST be in this list.
+    // You can leave it empty and assign roles later if you build an admin UI.
+    const SUPERADMIN_ADDRESSES = ["0x0707eeB901d6c78bD0b3b31C2C6F5E00DF8f26Dd"]; // Replace or add your desired superadmin ETH address(es)
 
 
-            async function updateState(securityState) {
-                updateUICall(securityState);
+    // --- APP STATE ---
+    let db;
+    let volatileIdentity = null; // To store { address, mnemonic, privateKey } temporarily
+    let unsubscribeMessages = null;
+    let currentUserAddress = null;
 
-                if (!securityState) {
-                    currentUserAddress = null;
-                    return;
-                }
+    const extensionTabIdToPageHash = new Map();
+    const pageHashToReferenceCountedUnsubscribe = new Map();
 
-                currentUserAddress = securityState.activeAddress;
+    // --- RBAC Custom Roles ---
+    const CHAT_APP_ROLES = {
+        superadmin: {
+            can: ["assignRole", "deleteAnyMessage", "write"],
+            inherits: ["admin"]
+        }, // Example
+        admin: {
+            can: ["deleteMessage"],
+            inherits: ["user"]
+        }, // Example
+        user: {
+            can: ["write", "readSelf"],
+            inherits: ["guest"]
+        }, // "write" allows sending messages
+        guest: {
+            can: ["read", "write", "sync"]
+        }, // Default, can read public messages
+    };
 
 
-                if (securityState.isActive) {
-                    for (let i = 0; i < SUPERADMIN_ADDRESSES.length; i++) {
-                        await rbac.assignRole(SUPERADMIN_ADDRESSES[i], 'superadmin').catch((err) => {
-                            throw new Error("assign superadmin role fail:" + err.message);
-                        });
-                    }
+    async function updateState(securityState) {
+        updateUICall(securityState);
 
-                    pageHashToReferenceCountedUnsubscribe.forEach((val, key, map) => {
-                        if (val.unsubscribe) { // Unsubscribe from previous listener if any
-                            val.unsubscribe();
-                            val.unsubscribe = null;
-                        }
-                        loadMessages(key, val, false);
-                    });
+        if (!securityState) {
+            currentUserAddress = null;
+            return;
+        }
 
-                } else {
-                    forceUnsubscribeAll();
-                }
-            }
+        currentUserAddress = securityState.activeAddress;
 
-            function updateUICall(securityState) {
-                chrome.runtime.sendMessage({
-                    action: "updateUI",
-                    securityState: securityState
+
+        if (securityState.isActive) {
+            for (let i = 0; i < SUPERADMIN_ADDRESSES.length; i++) {
+                await rbac.assignRole(SUPERADMIN_ADDRESSES[i], 'superadmin').catch((err) => {
+                    throw new Error("assign superadmin role fail:" + err.message);
                 });
             }
 
-
-            // --- IDENTITY MANAGEMENT HANDLERS ---
-            async function registerNew(sendResponse) {
-                try {
-                    volatileIdentity = await rbac.startNewUserRegistration();
-                    if (volatileIdentity) {
-                        sendResponse({
-                            address: volatileIdentity.address,
-                            mnemonic: volatileIdentity.mnemonic
-                        });
-                        // UI update will be handled by securityStateChangeCallback
-                    } else {
-                        sendResponse({
-                            error: "Failed to generate new identity."
-                        });
-                    }
-                } catch (error) {
-                    sendResponse({
-                        error: "Failed to generate new identity."
-                    });
-                    console.error(`Registration error: ${error.message}`);
+            pageHashToReferenceCountedUnsubscribe.forEach((val, key, map) => {
+                if (val.unsubscribe) { // Unsubscribe from previous listener if any
+                    val.unsubscribe();
+                    val.unsubscribe = null;
                 }
-            };
+                loadMessages(key, val, false);
+            });
 
-            async function protectWebAuthn(sendResponse) {
-                if (!volatileIdentity || !volatileIdentity.privateKey) {
-                    sendResponse({error: "No volatile identity (private key) available to protect. Please generate one first."});
-                    return;
-                }
-                try {
-                    const protectedAddress = await rbac.protectCurrentIdentityWithWebAuthn(volatileIdentity.privateKey);
-                    if (protectedAddress) {
-                        sendResponse({message: `Identity ${protectedAddress} protected with WebAuthn and you are now logged in!`});
-                        volatileIdentity = null; // Clear volatile identity once protected
-                        // UI update via callback
-                    } else {
-                        sendResponse({error: "WebAuthn protection failed. Ensure your browser supports it, you are on HTTPS/localhost, and you completed the WebAuthn prompt."});
-                    }
-                } catch (error) {
-                    console.error("WebAuthn protection error:", error);
-                    sendResponse({error: `WebAuthn protection error: ${error.message}`});
-                }
-            };
+        } else {
+            forceUnsubscribeAll();
+        }
+    }
 
-            async function loginWebAuthn(sendResponse) {
-                try {
-                    const loggedInAddress = await rbac.loginCurrentUserWithWebAuthn();
-                    if (loggedInAddress) {
-                        await ensureUserRole(loggedInAddress); // Ensure they have 'user' role
-                        sendResponse({message: `Logged in with WebAuthn as ${loggedInAddress}`});
-                    } else {
-                         sendResponse({error: "WebAuthn login failed. Have you registered WebAuthn for this site?"});
-                    }
-                } catch (error) {
-                    console.error("WebAuthn login error:", error);
-                    sendResponse({error: `WebAuthn login error: ${error.message}`});
-                }
-            };
+    function updateUICall(securityState) {
+        chrome.runtime.sendMessage({
+            action: "updateUI",
+            securityState: securityState
+        });
+    }
 
-            async function loginMnemonic(mnemonic, sendResponse) {
-                try {
-                    const identity = await rbac.loginOrRecoverUserWithMnemonic(mnemonic);
-                    if (identity) {
-                        await ensureUserRole(identity.address); // Ensure they have 'user' role
-                        sendResponse({
-                            mnemonic: "",
-                            message: `Logged in with mnemonic for address ${identity.address}`
-                        }); // Clear after use
-                        // User might want to protect this session with WebAuthn now
-                        // For simplicity, we don't auto-prompt that here.
-                    } else {
-                        sendResponse({
-                            error: "Failed to login with mnemonic. Please check the phrase."
-                        });
-                    }
-                } catch (error) {
-                    console.error("Mnemonic login error:", error);
-                    sendResponse({
-                            error: `Mnemonic login error: ${error.message}`
-                    });
-                }
-            };
 
-            async function ensureUserRole(address) {
-                try {
-                    // We use db.map() to find a node that matches the query
-                    const {
-                        results
-                    } = await db.map({
-                        query: {
-                            type: 'role',
-                            ethAddress: address
-                        },
-                        $limit: 1 // We only need to know if at least one exists
-                    });
+    // --- IDENTITY MANAGEMENT HANDLERS ---
+    async function registerNew(sendResponse) {
+        try {
+            volatileIdentity = await rbac.startNewUserRegistration();
+            if (volatileIdentity) {
+                sendResponse({
+                    address: volatileIdentity.address,
+                    mnemonic: volatileIdentity.mnemonic
+                });
+                // UI update will be handled by securityStateChangeCallback
+            } else {
+                sendResponse({
+                    error: "Failed to generate new identity."
+                });
+            }
+        } catch (error) {
+            sendResponse({
+                error: "Failed to generate new identity."
+            });
+            console.error(`Registration error: ${error.message}`);
+        }
+    };
 
-                    // If the results array is not empty, the role already exists
-                    if (results.length > 0) {
-                        console.log(`User ${address} already has a role.`);
-                        return;
-                    }
+    async function protectWebAuthn(sendResponse) {
+        if (!volatileIdentity || !volatileIdentity.privateKey) {
+            sendResponse({
+                error: "No volatile identity (private key) available to protect. Please generate one first."
+            });
+            return;
+        }
+        try {
+            const protectedAddress = await rbac.protectCurrentIdentityWithWebAuthn(volatileIdentity.privateKey);
+            if (protectedAddress) {
+                sendResponse({
+                    message: `Identity ${protectedAddress} protected with WebAuthn and you are now logged in!`
+                });
+                volatileIdentity = null; // Clear volatile identity once protected
+                // UI update via callback
+            } else {
+                sendResponse({
+                    error: "WebAuthn protection failed. Ensure your browser supports it, you are on HTTPS/localhost, and you completed the WebAuthn prompt."
+                });
+            }
+        } catch (error) {
+            console.error("WebAuthn protection error:", error);
+            sendResponse({
+                error: `WebAuthn protection error: ${error.message}`
+            });
+        }
+    };
 
-                    // If not, we assign the 'user' role
-                    console.log(`Assigning 'user' role to ${address}...`);
-                    await rbac.assignRole(address, 'user');
-                    console.log(`Role 'user' assigned to ${address}`);
-                } catch (error) {
-                    console.error("Failed during role check/assignment:", error);
-                    throw error;
-                }
+    async function loginWebAuthn(sendResponse) {
+        try {
+            const loggedInAddress = await rbac.loginCurrentUserWithWebAuthn();
+            if (loggedInAddress) {
+                await ensureUserRole(loggedInAddress); // Ensure they have 'user' role
+                sendResponse({
+                    message: `Logged in with WebAuthn as ${loggedInAddress}`
+                });
+            } else {
+                sendResponse({
+                    error: "WebAuthn login failed. Have you registered WebAuthn for this site?"
+                });
+            }
+        } catch (error) {
+            console.error("WebAuthn login error:", error);
+            sendResponse({
+                error: `WebAuthn login error: ${error.message}`
+            });
+        }
+    };
+
+    async function loginMnemonic(mnemonic, sendResponse) {
+        try {
+            const identity = await rbac.loginOrRecoverUserWithMnemonic(mnemonic);
+            if (identity) {
+                await ensureUserRole(identity.address); // Ensure they have 'user' role
+                sendResponse({
+                    mnemonic: "",
+                    message: `Logged in with mnemonic for address ${identity.address}`
+                }); // Clear after use
+                // User might want to protect this session with WebAuthn now
+                // For simplicity, we don't auto-prompt that here.
+            } else {
+                sendResponse({
+                    error: "Failed to login with mnemonic. Please check the phrase."
+                });
+            }
+        } catch (error) {
+            console.error("Mnemonic login error:", error);
+            sendResponse({
+                error: `Mnemonic login error: ${error.message}`
+            });
+        }
+    };
+
+    async function ensureUserRole(address) {
+        try {
+            // We use db.map() to find a node that matches the query
+            const {
+                results
+            } = await db.map({
+                query: {
+                    type: 'role',
+                    ethAddress: address
+                },
+                $limit: 1 // We only need to know if at least one exists
+            });
+
+            // If the results array is not empty, the role already exists
+            if (results.length > 0) {
+                console.log(`User ${address} already has a role.`);
+                return;
             }
 
-            async function logout(sendResponse) {
-                try {
-                    await rbac.clearSecurity();
-                    sendResponse({message: "You have been logged out."});
-                } catch (error) {
-                    console.error("Logout error:", error);
-                    sendResponse({error: `Logout error: ${error.message}`});
-                }
+            // If not, we assign the 'user' role
+            console.log(`Assigning 'user' role to ${address}...`);
+            await rbac.assignRole(address, 'user');
+            console.log(`Role 'user' assigned to ${address}`);
+        } catch (error) {
+            console.error("Failed during role check/assignment:", error);
+            throw error;
+        }
+    }
+
+    async function logout(sendResponse) {
+        try {
+            await rbac.clearSecurity();
+            sendResponse({
+                message: "You have been logged out."
+            });
+        } catch (error) {
+            console.error("Logout error:", error);
+            sendResponse({
+                error: `Logout error: ${error.message}`
+            });
+        }
+    };
+
+    async function sendMessage(pageHash, text, sendResponse) {
+        try {
+            // Check permission to send message (defined as 'write' in custom roles)
+            const senderAddress = await rbac.executeWithPermission('write');
+
+            const messageData = {
+                type: 'message',
+                hash: pageHash,
+                sender: senderAddress,
+                text: text,
+                timestamp: Date.now()
             };
+            await db.put(messageData);
+            sendResponse({
+                text: ""
+            });
+            // Message will appear via the real-time 'map' listener
+        } catch (error) {
+            console.error("Failed to send message:", error);
+            sendResponse({
+                error: `Failed to send message: ${error.message}. Do you have 'write' permission?`
+            });
+        }
+    };
 
-            async function sendMessage(pageHash, text, sendResponse) {
-                try {
-                    // Check permission to send message (defined as 'write' in custom roles)
-                    const senderAddress = await rbac.executeWithPermission('write');
+    // --- INITIALIZATION ---
+    async function initializeApp() {
+        try {
+            statusBarUISet("Status: Initializing DB...");
+            db = new GDB.GDB("cDiscuss-DB");
 
-                    const messageData = {
+            statusBarUISet("Status: DB Ready. Initializing Security Context...");
+
+            await rbac.createSecurityContext(db, SUPERADMIN_ADDRESSES);
+
+            rbac.setCustomRoles(CHAT_APP_ROLES);
+            rbac.setSecurityStateChangeCallback(updateState);
+
+            // Trigger initial UI update based on current state (e.g. from silent WebAuthn login)
+            // The callback itself will be called by createSecurityContext, but to be safe:
+            const initialState = getInitialState();
+
+            updateState(initialState);
+
+            // Attempt silent WebAuthn login if available
+            if (rbac.hasExistingWebAuthnRegistration() && !rbac.isSecurityActive()) {
+                console.log("Attempting silent WebAuthn login...");
+                await rbac.loginCurrentUserWithWebAuthn().catch(err => console.warn("Silent WebAuthn login failed or no registration:", err.message));
+            }
+        } catch (error) {
+            console.error("Initialization failed:", error);
+            statusBarUISet(`Error: ${error.message}`);
+            throw error;
+        }
+    }
+
+    function statusBarUISet(text) {
+        chrome.runtime.sendMessage({
+            action: "statusBarUISet",
+            text: text
+        });
+    }
+
+    function displayMessage({
+        id,
+        value,
+        action
+    }) {
+        chrome.runtime.sendMessage({
+            action: "displayMessage",
+            myData: {
+                id: id,
+                value: value,
+                action: action
+            }
+        });
+    }
+
+    function clearMessagesContainer(pageHash) {
+        chrome.runtime.sendMessage({
+            action: "clearMessagesContainer",
+            hash: pageHash
+        });
+    }
+
+    async function loadMessages(pageHash, unsubscribeObject, doThrow) {
+        if (unsubscribeObject.unsubscribe !== null || unsubscribeObject.referenceCount < 1)
+            return;
+        clearMessagesContainer(pageHash);
+
+        try {
+            const {
+                unsubscribe
+            } = await db.map({
+                    query: {
                         type: 'message',
-                        hash: pageHash,
-                        sender: senderAddress,
-                        text: text,
-                        timestamp: Date.now()
-                    };
-                    await db.put(messageData);
-                    sendResponse({
-                        text: ""
-                    });
-                    // Message will appear via the real-time 'map' listener
-                } catch (error) {
-                    console.error("Failed to send message:", error);
-                    sendResponse({
-                        error: `Failed to send message: ${error.message}. Do you have 'write' permission?`
-                    });
-                }
-            };
+                        hash: pageHash
+                    },
+                    field: 'timestamp',
+                    order: 'asc'
+                },
+                displayMessage // ({ id, value, action, edges, timestamp })
+            );
+            unsubscribeObject.unsubscribe = unsubscribe;
+        } catch (error) {
+            console.error("Failed to load messages:", error);
+            if (doThrow)
+                throw error;
+            else
+                alert(`Failed to load messages: ${error.message}`);
+        }
+    }
 
-            // --- INITIALIZATION ---
-            async function initializeApp() {
-                try {
-                    statusBarUISet("Status: Initializing DB...");
-                    db = new GDB.GDB("cDiscuss-DB");
+    function getInitialState() {
+        return {
+            isActive: rbac.isSecurityActive(),
+            activeAddress: rbac.getActiveEthAddress(),
+            isWebAuthnProtected: rbac.isCurrentSessionProtectedByWebAuthn(),
+            hasVolatileIdentity: !!rbac.getMnemonicForDisplayAfterRegistrationOrRecovery(), // Heuristic
+            hasWebAuthnHardwareRegistration: rbac.hasExistingWebAuthnRegistration()
+        };
+    }
 
-                    statusBarUISet("Status: DB Ready. Initializing Security Context...");
+    async function newExtensionTab(pageHash, newExtensionTabId, sendResponse) {
+        try {
+            extensionTabIdToPageHash.set(newExtensionTabId, pageHash);
 
-                    await rbac.createSecurityContext(db, SUPERADMIN_ADDRESSES);
+            referenceSubscription(pageHash);
 
-                    rbac.setCustomRoles(CHAT_APP_ROLES);
-                    rbac.setSecurityStateChangeCallback(updateState);
+            // Start the application
+            if (rbac.isSecurityActive()) {
 
-                    // Trigger initial UI update based on current state (e.g. from silent WebAuthn login)
-                    // The callback itself will be called by createSecurityContext, but to be safe:
-                    const initialState = {
-                        isActive: rbac.isSecurityActive(),
-                        activeAddress: rbac.getActiveEthAddress(),
-                        isWebAuthnProtected: rbac.isCurrentSessionProtectedByWebAuthn(),
-                        hasVolatileIdentity: !!rbac.getMnemonicForDisplayAfterRegistrationOrRecovery(), // Heuristic
-                        hasWebAuthnHardwareRegistration: rbac.hasExistingWebAuthnRegistration()
-                    };
+                const initialState = getInitialState();
 
-                    updateState(initialState);
+                updateUICall(initialState);
 
-                    // Attempt silent WebAuthn login if available
-                    if (rbac.hasExistingWebAuthnRegistration() && !rbac.isSecurityActive()) {
-                        console.log("Attempting silent WebAuthn login...");
-                        await rbac.loginCurrentUserWithWebAuthn().catch(err => console.warn("Silent WebAuthn login failed or no registration:", err.message));
-                    }
-                } catch (error) {
-                    console.error("Initialization failed:", error);
-                    statusBarUISet(`Error: ${error.message}`);
-                    throw error;
-                }
-            }
-
-            function statusBarUISet(text) {
-                chrome.runtime.sendMessage({
-                    action: "statusBarUISet",
-                    text: text
-                });
-            }
-
-            function displayMessage({
-                id,
-                value,
-                action
-            }) {
-                chrome.runtime.sendMessage({
-                    action: "displayMessage",
-                    myData: {
-                        id: id,
-                        value: value,
-                        action: action
-                    }
-                });
-            }
-
-            function clearMessagesContainer(pageHash) {
-                chrome.runtime.sendMessage({
-                    action: "clearMessagesContainer",
-                    hash: pageHash
-                });
-            }
-
-            async function loadMessages(pageHash, unsubscribeObject, doThrow) {
-                if (unsubscribeObject.unsubscribe !== null || unsubscribeObject.referenceCount < 1)
-                    return;
-                clearMessagesContainer(pageHash);
-
-                try {
-                    const {
-                        unsubscribe
-                    } = await db.map({
-                            query: {
-                                type: 'message',
-                                hash: pageHash
-                            },
-                            field: 'timestamp',
-                            order: 'asc'
-                        },
-                        displayMessage // ({ id, value, action, edges, timestamp })
-                    );
-                    unsubscribeObject.unsubscribe = unsubscribe;
-                } catch (error) {
-                    console.error("Failed to load messages:", error);
-                    if (doThrow)
-                      throw error;
-                    else
-                       alert(`Failed to load messages: ${error.message}`);
-                }
-            }
-
-            async function newExtensionTab(pageHash, newExtensionTabId, sendResponse) {
-                try {
-                    extensionTabIdToPageHash.set(newExtensionTabId, pageHash);
-
-                    referenceSubscription(pageHash);
-
-                    // Start the application
-                    if (rbac.isSecurityActive()) {
-
-                        const initialState = {
-                            isActive: rbac.isSecurityActive(),
-                            activeAddress: rbac.getActiveEthAddress(),
-                            isWebAuthnProtected: rbac.isCurrentSessionProtectedByWebAuthn(),
-                            hasVolatileIdentity: !!rbac.getMnemonicForDisplayAfterRegistrationOrRecovery(), // Heuristic
-                            hasWebAuthnHardwareRegistration: rbac.hasExistingWebAuthnRegistration()
-                        };
-
-                        updateUICall(initialState);
-
-                        if (pageHashToReferenceCountedUnsubscribe.has(pageHash)) {
-                            const unsubscribeObject = pageHashToReferenceCountedUnsubscribe.get(pageHash);
-                            await loadMessages(pageHash, unsubscribeObject, true);
-                        }
-
-
-                    } else {
-                        await initializeApp();
-                    }
-                    sendResponse({});
-                } catch (error) {
-                    console.error("Failed to register another tab or initialize extension:", error);
-                    sendResponse({
-                                error: `Failed to register another tab or initialize extension:  ${error.message}`});
-                }
-            }
-            
-            chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-                if (message.action === "extensionTabInit") {
-                            
-                    console.log("Received in tab:", message.myData);
-                    const pageHash = message.myData.urlHash;
-                    const newExtensionTabId = message.myData.newExtensionTabId;
-                                
-                    newExtensionTab(pageHash, newExtensionTabId, sendResponse);
-                    return true;
-                } else if (message.action === "registerNew") {
-                    registerNew(sendResponse);
-                    return true;
-                } else if (message.action === "protectWebAuthn") {
-                    protectWebAuthn(sendResponse);
-                    return true;
-                } else if (message.action === "loginWebAuthn") {
-                    loginWebAuthn(sendResponse);
-                    return true;
-                } else if (message.action === "loginMnemonic") {
-                    loginMnemonic(message.mnemonic, sendResponse);
-                    return true;
-                } else if (message.action === "logout") {
-                    logout(sendResponse);
-                    return true;
-                } else if (message.action === "sendMessage") {
-                    sendMessage(message.hash, message.text, sendResponse);
-                    return true;
-                }
-            });
-
-
-            function referenceSubscription(pageHash) {
-                let unsubscribeObject = null;
                 if (pageHashToReferenceCountedUnsubscribe.has(pageHash)) {
-                    unsubscribeObject = pageHashToReferenceCountedUnsubscribe.get(pageHash);
-                    unsubscribeObject.referenceCount++;
-                } else {
-                    unsubscribeObject = {
-                        referenceCount: 1,
-                        unsubscribe: null
-                    }
-                    pageHashToReferenceCountedUnsubscribe.set(pageHash, unsubscribeObject);
+                    const unsubscribeObject = pageHashToReferenceCountedUnsubscribe.get(pageHash);
+                    await loadMessages(pageHash, unsubscribeObject, true);
                 }
 
+
+            } else {
+                await initializeApp();
             }
-
-
-            function unreferenceSubscription(pageHash) {
-                if (!pageHashToReferenceCountedUnsubscribe.has(pageHash))
-                    return;
-                const unsubscribeObject = pageHashToReferenceCountedUnsubscribe.get(pageHash);
-                unsubscribeObject.referenceCount--;
-
-                if (unsubscribeObject.referenceCount > 0)
-                    return;
-
-                if (unsubscribeObject.unsubscribe)
-                    unsubscribeObject.unsubscribe();
-                pageHashToReferenceCountedUnsubscribe.delete(pageHash);
-            }
-
-            function forceRemoveAllSubscriptions() {
-                pageHashToReferenceCountedUnsubscribe.forEach((val, key, map) => {
-                    val.referenceCount = 0;
-
-                    if (val.unsubscribe)
-                    {
-                        val.unsubscribe();
-                        val.unsubscribe = null;
-                    }
-                });
-                pageHashToReferenceCountedUnsubscribe.clear();
-            }
-
-            function forceUnsubscribeAll() {
-                pageHashToReferenceCountedUnsubscribe.forEach((val, key, map) => {
-
-                    if (val.unsubscribe) {
-                        val.unsubscribe();
-                        val.unsubscribe = null;
-                    }
-                });
-            }
-
-
-            chrome.tabs.onRemoved.addListener((tabId) => {
-                if (extensionTabIdToPageHash.has(tabId)) {
-                    const pageHash = extensionTabIdToPageHash.get(tabId);
-                    extensionTabIdToPageHash.delete(tabId)
-                    unreferenceSubscription(pageHash);
-
-                    cleanupIfNoExtensionTabs();
-                }
-
+            sendResponse({});
+        } catch (error) {
+            console.error("Failed to register another tab or initialize extension:", error);
+            sendResponse({
+                error: `Failed to register another tab or initialize extension:  ${error.message}`
             });
+        }
+    }
 
-            function cleanupIfNoExtensionTabs() {
-                if (extensionTabIdToPageHash.size === 0) {
-                    forceRemoveAllSubscriptions();
-                }
+    chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+        if (message.action === "extensionTabInit") {
+
+            console.log("Received in tab:", message.myData);
+            const pageHash = message.myData.urlHash;
+            const newExtensionTabId = message.myData.newExtensionTabId;
+
+            newExtensionTab(pageHash, newExtensionTabId, sendResponse);
+            return true;
+        } else if (message.action === "registerNew") {
+            registerNew(sendResponse);
+            return true;
+        } else if (message.action === "protectWebAuthn") {
+            protectWebAuthn(sendResponse);
+            return true;
+        } else if (message.action === "loginWebAuthn") {
+            loginWebAuthn(sendResponse);
+            return true;
+        } else if (message.action === "loginMnemonic") {
+            loginMnemonic(message.mnemonic, sendResponse);
+            return true;
+        } else if (message.action === "logout") {
+            logout(sendResponse);
+            return true;
+        } else if (message.action === "sendMessage") {
+            sendMessage(message.hash, message.text, sendResponse);
+            return true;
+        }
+    });
+
+
+    function referenceSubscription(pageHash) {
+        let unsubscribeObject = null;
+        if (pageHashToReferenceCountedUnsubscribe.has(pageHash)) {
+            unsubscribeObject = pageHashToReferenceCountedUnsubscribe.get(pageHash);
+            unsubscribeObject.referenceCount++;
+        } else {
+            unsubscribeObject = {
+                referenceCount: 1,
+                unsubscribe: null
             }
+            pageHashToReferenceCountedUnsubscribe.set(pageHash, unsubscribeObject);
+        }
 
-        })();
+    }
+
+
+    function unreferenceSubscription(pageHash) {
+        if (!pageHashToReferenceCountedUnsubscribe.has(pageHash))
+            return;
+        const unsubscribeObject = pageHashToReferenceCountedUnsubscribe.get(pageHash);
+        unsubscribeObject.referenceCount--;
+
+        if (unsubscribeObject.referenceCount > 0)
+            return;
+
+        if (unsubscribeObject.unsubscribe)
+            unsubscribeObject.unsubscribe();
+        pageHashToReferenceCountedUnsubscribe.delete(pageHash);
+    }
+
+    function forceRemoveAllSubscriptions() {
+        pageHashToReferenceCountedUnsubscribe.forEach((val, key, map) => {
+            val.referenceCount = 0;
+
+            if (val.unsubscribe) {
+                val.unsubscribe();
+                val.unsubscribe = null;
+            }
+        });
+        pageHashToReferenceCountedUnsubscribe.clear();
+    }
+
+    function forceUnsubscribeAll() {
+        pageHashToReferenceCountedUnsubscribe.forEach((val, key, map) => {
+
+            if (val.unsubscribe) {
+                val.unsubscribe();
+                val.unsubscribe = null;
+            }
+        });
+    }
+
+
+    chrome.tabs.onRemoved.addListener((tabId) => {
+        if (extensionTabIdToPageHash.has(tabId)) {
+            const pageHash = extensionTabIdToPageHash.get(tabId);
+            extensionTabIdToPageHash.delete(tabId)
+            unreferenceSubscription(pageHash);
+
+            cleanupIfNoExtensionTabs();
+        }
+
+    });
+
+    function cleanupIfNoExtensionTabs() {
+        if (extensionTabIdToPageHash.size === 0) {
+            forceRemoveAllSubscriptions();
+        }
+    }
+
+})();

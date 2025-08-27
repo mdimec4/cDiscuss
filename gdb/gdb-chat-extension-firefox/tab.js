@@ -77,7 +77,7 @@ btnRegisterNew.onclick = async () => {
     chrome.runtime.sendMessage({
         action: "registerNew"
     }, (response) => {
-        if (!!response) return;
+        if (!response) return;
         if (response.error) {
             alert(response.error);
             return;
@@ -91,7 +91,7 @@ btnProtectWebAuthn.onclick = async () => {
     chrome.runtime.sendMessage({
         action: "protectWebAuthn"
     }, (response) => {
-        if (!!response) retuern;
+        if (!response) retuern;
         if (response.message)
             alert(response.message);
         else if (response.error)
@@ -103,7 +103,7 @@ btnLoginWebAuthn.onclick = async () => {
     chrome.runtime.sendMessage({
         action: "loginWebAuthn"
     }, (response) => {
-        if (!!response) retuern;
+        if (!response) retuern;
         if (response.message)
             alert(response.message);
         if (response.error)
@@ -122,7 +122,7 @@ btnLoginMnemonic.onclick = async () => {
         action: "loginMnemonic",
         mnemonic: mnemonic
     }, (response) => {
-        if (!!response) return;
+        if (!response) return;
         if (response.message)
             alert(response.message);
         if (response.error)
@@ -136,7 +136,7 @@ btnLogout.onclick = async () => {
     chrome.runtime.sendMessage({
         action: "logout"
     }, (response) => {
-        if (!!response) retuern;
+        if (!response) retuern;
         if (response.message)
             alert(response.message);
         if (response.error)
@@ -194,7 +194,7 @@ btnSendMessage.onclick = async () => {
         hash: pageHash,
         text: text
     }, (response) => {
-        if (!!response) return;
+        if (!response) return;
         if (response.error) {
             alert(response.error);
             return;
@@ -232,7 +232,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     } else if (message.action === "updateUI") {
         updateUI(message.securityState);
     } else if (message.action === "displayMessage" && message.myData.value.hash === pageHash) {
-        displayMessage(message.myData.id, message.myData.value, message.myData.action);
+        displayMessage(message.myData);
     } else if (message.action === "statusBarUISet") {
         statusBar.textContent = message.text;
     } else if (message.action === "clearMessagesContainer" && message.hash === pageHash) {
