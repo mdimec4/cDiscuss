@@ -29,6 +29,7 @@
         .auth-options { display: flex; flex-direction: column; gap: 10px; }
         .action-group { margin-bottom: 15px; padding-bottom: 15px; border-bottom: 1px solid #eee;}
         .action-group:last-child { border-bottom: none; }
+        .show-mnemonic-btn {background-color: #8e44ad; margin-top: 5px;}
     </style>
 </head>
 <body>
@@ -48,7 +49,12 @@
                     <button id="btnRegisterNew">1. Generate New Identity (Mnemonic)</button>
                     <div id="newIdentityInfo" class="hidden">
                         <p><strong>Address:</strong> <code id="newEthAddress"></code></p>
-                        <p><strong>Mnemonic:</strong> <code id="newMnemonic"></code></p>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <strong>Mnemonic:</strong>
+                            <code id="newMnemonic"></code>
+                            <button id="btnCopyMnemonic" class="show-mnemonic-btn"
+                                style="padding: 6px 10px; font-size: 0.95em;">Copy</button>
+                        </div>
                         <div class="mnemonic-warning">⚠️ IMPORTANT: Save this mnemonic phrase securely. It's the only way to recover your account if you lose WebAuthn access or switch devices!</div>
                         <button id="btnProtectWebAuthn">2. Protect with WebAuthn & Login</button>
                     </div>
@@ -57,9 +63,12 @@
                 <div class="action-group">
                     <h3>Existing User?</h3>
                     <button id="btnLoginWebAuthn" disabled>Login with WebAuthn</button>
-                    <p>Or login with Mnemonic:</p>
+                    <p>Or login with Mnemonic:</p
+                    <div style="display: flex; gap: 8px; align-items: center;">
+                        <button id="btnRegisterWebAuthn" style="display:none;">Register with WebAuthn</button>
+                        <button id="btnLoginMnemonic">Login with Mnemonic</button>
+                    </div>
                     <textarea id="inputMnemonic" placeholder="Enter your 12-word mnemonic phrase..."></textarea>
-                    <button id="btnLoginMnemonic">Login with Mnemonic</button>
                 </div>
             </div>
         </div>

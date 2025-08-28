@@ -9,8 +9,8 @@
         });
     };
 
-    const GDB = await import("/vendor/gdb.min.js");
-    const rbac = await import("/vendor/rbac.min.js");
+    const GDB = await import("/vendor/index.js");
+
     // --- CONFIGURATION ---
     // IMPORTANT: For a user to be superadmin on first registration,
     // their generated ETH address MUST be in this list.
@@ -19,10 +19,15 @@
 
 
     // --- APP STATE ---
+    // Normalize superadmin addresses to be case-insensitive
+    const SUPERADMIN_SET = new Set(SUPERADMIN_ADDRESSES.map(a => a.toLowerCase()));
+    const isSuperadminAddress = (addr) => !!addr && SUPERADMIN_SET.has(addr.toLowerCase());
     let db;
+    let sm;
     let volatileIdentity = null; // To store { address, mnemonic, privateKey } temporarily
     let unsubscribeMessages = null;
     let currentUserAddress = null;
+    let currentUserRole = null;
 
     const extensionTabIdToPageHash = new Map();
     const pageHashToReferenceCountedUnsubscribe = new Map();
@@ -48,48 +53,91 @@
 
 
     async function updateState(securityState) {
-        updateUICall(securityState);
-
-        if (!securityState) {
-            currentUserAddress = null;
-            return;
-        }
-
-        currentUserAddress = securityState.activeAddress;
-
-
-        if (securityState.isActive) {
-            for (let i = 0; i < SUPERADMIN_ADDRESSES.length; i++) {
-                await rbac.assignRole(SUPERADMIN_ADDRESSES[i], 'superadmin').catch((err) => {
-                    throw new Error("assign superadmin role fail:" + err.message);
-                });
+        try {
+            if (!securityState) {
+                currentUserAddress = null;
+                currentUserRole = null;
+                return;
             }
 
-            pageHashToReferenceCountedUnsubscribe.forEach((val, key, map) => {
-                /*if (val.unsubscribe) { // Unsubscribe from previous listener if any
-                    val.unsubscribe();
-                    val.unsubscribe = null;
-                }*/
-                loadMessages(key, val, false);
-            });
+            currentUserAddress = securityState.activeAddress;
+            if (securityState.isActive) {
 
-        } else {
-            forceUnsubscribeAll();
+                if (isSuperadminAddress(currentUserAddress)) {
+                    currentUserRole = 'superadmin';
+                } else {
+                    try {
+                        await ensureUserRole(currentUserAddress);
+                    } catch (error) {
+                        console.error(`Ensure user role: ${error.message}`);
+                    }
+                }
+
+                for (let i = 0; i < SUPERADMIN_ADDRESSES.length; i++) {
+                    await sm.assignRole(SUPERADMIN_ADDRESSES[i], 'superadmin').catch((err) => {
+                        throw new Error("assign superadmin role fail:" + err.message);
+                    });
+                }
+
+                pageHashToReferenceCountedUnsubscribe.forEach((val, key, map) => {
+                    loadMessages(key, val, false);
+                });
+
+            } else {
+                currentUserRole = null;
+                forceUnsubscribeAll();
+            }
+        } finally {
+            updateUICall(securityState);
         }
+
     }
 
-    function updateUICall(securityState) {
+    function updateUICall(securityState, currentUserRole) {
         chrome.runtime.sendMessage({
             action: "updateUI",
-            securityState: securityState
+            securityState: securityState,
+            currentUserRole: currentUserRole
         });
     }
+
+    /**
+     * Ensures the user has a role; assigns 'user' if none exists.
+     * @param {string} address Ethereum address
+     * @returns {Promise<void>}
+     */
+    const ensureUserRole = async address => {
+        try {
+            // Preferred: user:<address> node, as in the RBAC example app
+            const {
+                result: userNode
+            } = await db.get(`user:${address}`);
+            if (userNode?.value?.role) {
+                currentUserRole = userNode.value.role;
+                return;
+            }
+            // Fallback: legacy role storage
+            const {
+                results
+            } = await db.map({
+                query: {
+                    type: 'role',
+                    ethAddress: address
+                },
+                $limit: 1
+            });
+            currentUserRole = results[0]?.value?.role ?? 'guest';
+        } catch (error) {
+            console.error("Error ensuring role:", error);
+            currentUserRole = 'guest';
+        }
+    };
 
 
     // --- IDENTITY MANAGEMENT HANDLERS ---
     async function registerNew(sendResponse) {
         try {
-            volatileIdentity = await rbac.startNewUserRegistration();
+            volatileIdentity = await sm.startNewUserRegistration();
             if (volatileIdentity) {
                 sendResponse({
                     address: volatileIdentity.address,
@@ -117,7 +165,7 @@
             return;
         }
         try {
-            const protectedAddress = await rbac.protectCurrentIdentityWithWebAuthn(volatileIdentity.privateKey);
+            const protectedAddress = await sm.protectCurrentIdentityWithWebAuthn(volatileIdentity.privateKey);
             if (protectedAddress) {
                 sendResponse({
                     message: `Identity ${protectedAddress} protected with WebAuthn and you are now logged in!`
@@ -139,17 +187,22 @@
 
     async function loginWebAuthn(sendResponse) {
         try {
-            const loggedInAddress = await rbac.loginCurrentUserWithWebAuthn();
-            if (loggedInAddress) {
-                await ensureUserRole(loggedInAddress); // Ensure they have 'user' role
-                sendResponse({
-                    message: `Logged in with WebAuthn as ${loggedInAddress}`
-                });
-            } else {
+            const loggedInAddress = await sm.loginCurrentUserWithWebAuthn();
+            if (!loggedInAddress) {
                 sendResponse({
                     error: "WebAuthn login failed. Have you registered WebAuthn for this site?"
                 });
+                return;
             }
+            if (!isSuperadminAddress(identity.address)) {
+                await ensureUserRole(identity.address);
+            } else {
+                currentUserRole = 'superadmin';
+            }
+            sendResponse({
+                message: `Logged in with WebAuthn as ${loggedInAddress}`
+            });
+
         } catch (error) {
             console.error("WebAuthn login error:", error);
             sendResponse({
@@ -158,11 +211,19 @@
         }
     };
 
+    // TODO tu si ostal !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    // https://github.com/estebanrfp/gdb/blob/main/examples/chatrbac.html
+    
     async function loginMnemonic(mnemonic, sendResponse) {
         try {
-            const identity = await rbac.loginOrRecoverUserWithMnemonic(mnemonic);
+            const identity = await sm.loginOrRecoverUserWithMnemonic(mnemonic);
             if (identity) {
-                await ensureUserRole(identity.address); // Ensure they have 'user' role
+                // If it's not a superadmin address, ensure it has at least 'user' role
+                if (!isSuperadminAddress(identity.address)) {
+                    await ensureUserRole(identity.address);
+                } else {
+                    currentUserRole = 'superadmin';
+                }
                 sendResponse({
                     mnemonic: "",
                     message: `Logged in with mnemonic for address ${identity.address}`
@@ -182,40 +243,9 @@
         }
     };
 
-    async function ensureUserRole(address) {
-        try {
-            // We use db.map() to find a node that matches the query
-            const {
-                results
-            } = await db.map({
-                query: {
-                    type: 'role',
-                    ethAddress: address
-                },
-                $limit: 1 // We only need to know if at least one exists
-            });
-
-            // If the results array is not empty, the role already exists
-            if (results.length > 0) {
-                console.log(`User ${address} already has a role.`);
-                return;
-            }
-
-            // If not, we assign the 'user' role
-            console.log(`Assigning 'user' role to ${address}...`);
-            await rbac.assignRole(address, 'user').catch((err) => {
-                    throw new Error("assign user role fail:" + err.message);
-                });;
-            console.log(`Role 'user' assigned to ${address}`);
-        } catch (error) {
-            console.error("Failed during role check/assignment:", error);
-            throw error;
-        }
-    }
-
     async function logout(sendResponse) {
         try {
-            await rbac.clearSecurity();
+            await sm.clearSecurity();
             sendResponse({
                 message: "You have been logged out."
             });
@@ -229,15 +259,19 @@
 
     async function sendMessage(pageHash, text, sendResponse) {
         try {
-            // Check permission to send message (defined as 'write' in custom roles)
-            const senderAddress = await rbac.executeWithPermission('write');
+            const senderAddress = sm.getActiveEthAddress();
+            if (!sm.isSecurityActive() || !senderAddress) {
+                alert('Login required to send messages.');
+                return;
+            }
 
             const messageData = {
                 type: 'message',
                 hash: pageHash,
                 sender: senderAddress,
                 text: text,
-                timestamp: Date.now()
+                timestamp: Date.now(),
+                role: currentUserRole
             };
             await db.put(messageData);
             sendResponse({
@@ -258,26 +292,29 @@
             statusBarUISet("Status: Initializing DB...");
             db = new GDB.GDB("cDiscuss-DB");
 
+            db = await gdb("rbacChatAppDB", {
+                rtc: true,
+                sm: {
+                    superAdmins: SUPERADMIN_ADDRESSES,
+                    customRoles: CHAT_APP_ROLES,
+                }
+            });
+            sm = db.sm
+
             statusBarUISet("Status: DB Ready. Initializing Security Context...");
 
-
-            await rbac.createSecurityContext(db, SUPERADMIN_ADDRESSES);
-
-            rbac.setCustomRoles(CHAT_APP_ROLES);
-
-            rbac.setSecurityStateChangeCallback(updateState);
+            sm.setSecurityStateChangeCallback(updateState);
 
             // Trigger initial UI update based on current state (e.g. from silent WebAuthn login)
             // The callback itself will be called by createSecurityContext, but to be safe:
             const initialState = getInitialState();
 
             updateState(initialState);
+            // Do NOT trigger interactive WebAuthn login here.
+            // The Security Manager will attempt to silently resume a WebAuthn session during its initialization
+            // when the last session used WebAuthn and a valid registration exists on this device.
+            // Keep the "Login with WebAuthn" button so the user can start an interactive login when desired.
 
-            // Attempt silent WebAuthn login if available
-            if (rbac.hasExistingWebAuthnRegistration() && !rbac.isSecurityActive()) {
-                console.log("Attempting silent WebAuthn login...");
-                await rbac.loginCurrentUserWithWebAuthn().catch(err => console.warn("Silent WebAuthn login failed or no registration:", err.message));
-            }
         } catch (error) {
             console.error("Initialization failed:", error);
             statusBarUISet(`Error: ${error.message}`);
@@ -303,7 +340,9 @@
                 id: id,
                 value: value,
                 action: action
-            }
+            },
+            currentUserRole: currentUserRole,
+            isSuperadminAddress: isSuperadminAddress(currentUserAddress)
         });
     }
 
@@ -344,11 +383,11 @@
 
     function getInitialState() {
         return {
-            isActive: rbac.isSecurityActive(),
-            activeAddress: rbac.getActiveEthAddress(),
-            isWebAuthnProtected: rbac.isCurrentSessionProtectedByWebAuthn(),
-            hasVolatileIdentity: !!rbac.getMnemonicForDisplayAfterRegistrationOrRecovery(), // Heuristic
-            hasWebAuthnHardwareRegistration: rbac.hasExistingWebAuthnRegistration()
+            isActive: sm.isSecurityActive(),
+            activeAddress: sm.getActiveEthAddress(),
+            isWebAuthnProtected: sm.isCurrentSessionProtectedByWebAuthn(),
+            hasVolatileIdentity: !!sm.getMnemonicForDisplayAfterRegistrationOrRecovery(), // Heuristic
+            hasWebAuthnHardwareRegistration: sm.hasExistingWebAuthnRegistration()
         };
     }
 
@@ -359,13 +398,13 @@
             referenceSubscription(pageHash);
 
             // Start the application
-            if (rbac.isSecurityActive()) {
+            if (!!db && !!sm) {
 
                 const initialState = getInitialState();
 
                 updateUICall(initialState);
 
-                if (pageHashToReferenceCountedUnsubscribe.has(pageHash)) {
+                if (sm.isSecurityActive() && pageHashToReferenceCountedUnsubscribe.has(pageHash)) {
                     const unsubscribeObject = pageHashToReferenceCountedUnsubscribe.get(pageHash);
                     if (unsubscribeObject.unsubscribe) { // Unsubscribe from previous listener if any. This way all tabs for the same page will have all messages re-renderd.
                         unsubscribeObject.unsubscribe();
